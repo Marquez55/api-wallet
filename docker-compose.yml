@@ -1,0 +1,48 @@
+version: '3.3'
+
+services:
+  dbwallet:
+    image: mysql:8.0.27
+    cap_add:
+      - SYS_NICE # CAP_SYS_NICE
+    container_name: db-${PROJECT_NAME}
+    environment:
+      MYSQL_DATABASE: ${DATABASE_NAME}
+      MYSQL_USER: ${DATABASE_USER}
+      MYSQL_PASSWORD: ${DATABASE_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DATABASE_PASSWORD}
+      MYSQL_TCP_PORT: ${DATABASE_PORT}
+      MYSQL_UNIX_PORT: ${DATABASE_PORT}
+      TZ: America/Mexico_City
+    ports:
+      - "${DATABASE_PORT}:${DATABASE_PORT}"
+    volumes:
+      - db_data:/var/lib/mysql
+    # restart: always
+    # networks:
+    #   - inventario-net:
+
+  p:
+    build: .
+    image: api-${PROJECT_NAME}
+    container_name: api-content-${PROJECT_NAME}
+    environment:
+      TZ: America/Mexico_City
+    # command: django-admin startproject config . ### Primer comando para crear el proyecto (se debe compilar con build)
+    command: python manage.py runserver 0.0.0.0:${API_PORT}
+    volumes:
+      - .:/app
+    ports:
+      - "${API_PORT}:${API_PORT}"
+    depends_on:
+      - dbwallet
+    links:
+      - dbwallet
+    # restart: always
+    # networks:
+    #   - inventario-net:
+volumes:
+  db_data:
+
+# networks:
+#   inventario-net:

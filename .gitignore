@@ -1,0 +1,9 @@
+.idea
+# Ignorar archivos de logs y backups
+*.log
+*.swp
+*.bak
+
+# Ignorar las carpetas de migraciones de Django
+**/migrations/
+__pycache__/
