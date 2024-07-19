@@ -1,4 +1,0 @@
-¡Hola! {{ data.nombre }} {{ data.apellidos }}
-Gracias por registrarte. Tu número de participante es: {{ data.numero_de_participante }}
-Guarda este número, ya que es importante para futuras referencias.
-Saludos,

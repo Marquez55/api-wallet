@@ -4,5 +4,6 @@ from app.empresa import views
 
 
 urlpatterns = [
-    path('', views.EmpresaAPIView.as_view()),
+    path('update', views.EmpresaUpdateView.as_view(), name='empresa-update'),
+    path('get-app-url/', views.GetAppURLView.as_view(), name='get-app-url'),
 ]

@@ -1,95 +1,52 @@
-from django.shortcuts import render
-
-
-from rest_framework import status
+import os
+from rest_framework import status, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
-
 from django.contrib.auth.models import User
-from django.db import IntegrityError
 
 from app.empresa.models import Empresa
-from app.empresa.serializers import EmpresaSerializer
+from app.empresa.serializers import EmpresaUpdateSerializer
 
 from app.user.models import Perfil
-from app.authvalidate.models import TokenEmail
-
-from app.utils.token import generateToken
-
-from app.email.nuevo_usuario import nuevoUsuarioMail
-
-# Create your views here.
 
 
-class EmpresaAPIView(APIView):
+class EmpresaUpdateView(generics.UpdateAPIView):
+    permission_classes = (IsAuthenticated,)
 
-    permission_classes = (AllowAny,)
+    queryset = Empresa.objects.all()
+    serializer_class = EmpresaUpdateSerializer
 
-    def post(self, request):
-        """
-        Crea unanueva empresa
+    def put(self, request, *args, **kwargs):
+        user_id = request.user.id
+        perfil = Perfil.objects.get(user_id=user_id)
+        empresa = Empresa.objects.get(id=perfil.empresa_id)
 
-        Servicio que permite crear una nueva empresa para usar el inventario
+        new_email = request.data.get('email', None)
+        if new_email:
+            if User.objects.filter(email=new_email).exclude(id=user_id).exists():
+                return Response({"detail": "El correo electrónico ya está en uso."}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                request.user.email = new_email
+                request.user.save()
 
-        *Campos requeridos*
+        serializer = self.get_serializer(empresa, data=request.data, partial=True)
+        if serializer.is_valid(raise_exception=True):
+            self.perform_update(serializer)
+            return Response(serializer.data, status=status.HTTP_200_OK)
 
-        - **nombre\***
-        - **first_name\***
-        - **last_name\***
-        - **email\***
-        - **password\***
-        """
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = EmpresaSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(data=serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        dataRequest = serializer.data
+class GetAppURLView(APIView):
+    permission_classes = [AllowAny]
 
-        try:
-            empresa = Empresa(nombre=dataRequest.pop('nombre'))
-            empresa.save()
-        except Exception as e:
-            return Response(data={'message': 'no se puede crear la empresa', 'error-code': 'EMP-001'})
+    def get(self, request):
+        url_app = os.getenv('URL_APP')
+        if not url_app:
+            return Response({'detail': 'URL not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        user = User(
-            first_name=dataRequest['first_name'], last_name=dataRequest['last_name'],
-            username=dataRequest['email'], email=dataRequest['email'], is_active=False
-        )
+        url_app = url_app.rstrip('/')
 
-        user.set_password(dataRequest['password'])
-
-        try:
-            user.save()
-        except IntegrityError as e:
-            empresa.delete()
-            return Response(data={"message": "email already exist"}, status=status.HTTP_409_CONFLICT)
-        except Exception as e:
-            empresa.delete()
-            return Response(data={"message": "error to create user"}, status=status.HTTP_400_BAD_REQUEST)
-
-        perfil = Perfil(user=user, rol_id=1, empresa_id=empresa.id)
-
-        try:
-            perfil.save()
-        except Exception as e:
-            user.delete()
-            empresa.delete()
-            return Response(data={"message": "error to create profile of user"}, status=status.HTTP_400_BAD_REQUEST)
-
-        token = ''
-        try:
-            tokenEmail = TokenEmail.objects.get(user_id=user.id, typeToken="C")
-            token = tokenEmail.token
-        except TokenEmail.DoesNotExist:
-            token = generateToken(32)
-            tokenEmail = TokenEmail(user=user, token=token, typeToken="C")
-            tokenEmail.save()
-
-        nuevoUsuarioMail(user, token)
-
-        # return Response(data=us, status=status.HTTP_201_CREATED)
-
-        return Response(data={"message": "Empresa creada"}, status=status.HTTP_201_CREATED)
+        return Response({'url': url_app}, status=status.HTTP_200_OK)
