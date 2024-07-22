@@ -20,4 +20,26 @@ def create_catalog(sender, **kwargs):
         Anios.objects.create(anio=2032, activo=True)
         Anios.objects.create(anio=2033, activo=True)
 
+    if Mes.objects.count() == 0:
+        # Crear meses si no existen
+        Mes.objects.create(mes='Enero', activo=True)
+        Mes.objects.create(mes='Febrero', activo=True)
+        Mes.objects.create(mes='Marzo', activo=True)
+        Mes.objects.create(mes='Abril', activo=True)
+        Mes.objects.create(mes='Mayo', activo=True)
+        Mes.objects.create(mes='Junio', activo=True)
+        Mes.objects.create(mes='Julio', activo=True)
+        Mes.objects.create(mes='Agosto', activo=True)
+        Mes.objects.create(mes='Septiembre', activo=True)
+        Mes.objects.create(mes='Octubre', activo=True)
+        Mes.objects.create(mes='Noviembre', activo=True)
+        Mes.objects.create(mes='Diciembre', activo=True)
 
+
+    if Tipo.objects.count() == 0:
+        # Crear tipos si no existen
+        Tipo.objects.create(tipo='Ingreso', activo=True)
+        Tipo.objects.create(tipo='Egreso', activo=True)
+        Tipo.objects.create(tipo='Transferencia', activo=True)
+        Tipo.objects.create(tipo='Ajuste', activo=True)
+        Tipo.objects.create(tipo='Otro', activo=True)
