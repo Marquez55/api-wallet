@@ -1,3 +1,12 @@
-Hola Nuevo usuario
+Hola {{ usuario.first_name }} {{ usuario.last_name }},
+
+Gracias por registrarte en Believe Football.
+
+Para confirmar tu cuenta, por favor sigue este enlace:
 
 {{ url }}
+
+Si no solicitaste este registro, ignora este correo.
+
+Atentamente,
+El equipo de Believe Football

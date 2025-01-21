@@ -1,10 +1,8 @@
-version: '3.3'
-
 services:
   dbwallet:
-    image: mysql:8.0.27
+    image: mysql:8.0
     cap_add:
-      - SYS_NICE # CAP_SYS_NICE
+      - SYS_NICE
     container_name: db-${PROJECT_NAME}
     environment:
       MYSQL_DATABASE: ${DATABASE_NAME}
@@ -18,9 +16,6 @@ services:
       - "${DATABASE_PORT}:${DATABASE_PORT}"
     volumes:
       - db_data:/var/lib/mysql
-    # restart: always
-    # networks:
-    #   - inventario-net:
 
   p:
     build: .
@@ -32,17 +27,12 @@ services:
     command: python manage.py runserver 0.0.0.0:${API_PORT}
     volumes:
       - .:/app
+      - /repo_app/api_wallet:/repo_app/api_wallet
     ports:
       - "${API_PORT}:${API_PORT}"
     depends_on:
       - dbwallet
     links:
       - dbwallet
-    # restart: always
-    # networks:
-    #   - inventario-net:
 volumes:
   db_data:
-
-# networks:
-#   inventario-net:

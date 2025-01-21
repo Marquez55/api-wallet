@@ -2,7 +2,7 @@ from config.settings import URL_APP, DEFAULT_FROM_EMAIL, EMAIL_DEFAULT_ACTIVE, E
 from app.email.sendEmail import sendEmail
 
 
-def resetPassword(user, token):
+def nuevoAdminMail(user, token, password):
     """
         Función que se encarga de enviar un mail al usuario
         para recuperar su contraseña
@@ -12,15 +12,16 @@ def resetPassword(user, token):
     if EMAIL_DEFAULT_ACTIVE:
         emailTo = EMAIL_DEFAULT_TO
 
-    subject = 'Restablecer contraseña'
-    templateHtml = 'reset_password.html'
-    templateTxt = 'reset_password.txt'
-    segmento_url = 'reestablecer-contraseña/%s' %token
+    subject = 'Confirmar Cuenta Wallet'
+    templateHtml = 'confirm_admin.html'
+    templateTxt = 'nuevo_admin.txt'
+    segmento_url = 'confirmar/%s' % token
 
     data = {
         'usuario': {
             'first_name': user.first_name,
-            'last_name': user.last_name
+            'last_name': user.last_name,
+            'password': password
         },
         'url': URL_APP + segmento_url,
         'domain': URL_APP,

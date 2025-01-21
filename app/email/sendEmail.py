@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import get_template
 from django.template import Context
@@ -50,18 +49,9 @@ def sendEmailWhitAttachmen(templateHtml, templateTxt, data, headerEmail, pdf):
 
     msg = EmailMultiAlternatives(subject, text_content, from_email, to)
     msg.attach_alternative(html_content, "text/html")
-    msg.attach('plan_nutriocional.pdf', pdf, 'application/pdf')
 
     t = threading.Thread(target=execSendMail, args=(msg, ))
     t.start()
-
-    # execSendMail( msg )
-
-    # try:
-    # 	execSendMail()
-    # 	print("Se mando un correooooo")
-    # except Exception as e:
-    # 	print ("Ocurrio un error al intentar enviar el correo", e)
 
 
 def createEmailList(templateHtml, templateTxt, data, headerEmail, connection):

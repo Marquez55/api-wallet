@@ -14,10 +14,10 @@ def nuevoUsuarioMail(user, token):
     if EMAIL_DEFAULT_ACTIVE:
         emailTo = EMAIL_DEFAULT_TO
 
-    subject = 'Gracias por Registrarte'
+    subject = 'Confirmar Cuenta Wallet'
     templateHtml = 'confirm_account.html'
     templateTxt = 'nuevo_usuario.txt'
-    segmento_url = 'confirmar/%s/%s' % (user.id, token)
+    segmento_url = 'confirmar/%s' % token
 
     data = {
         'usuario': {
