@@ -23,7 +23,7 @@ services:
     container_name: api-content-${PROJECT_NAME}
     environment:
       TZ: America/Mexico_City
-    # command: django-admin startproject config . ### Primer comando para crear el proyecto (se debe compilar con build)
+    # command: django-admin startproject config
     command: python manage.py runserver 0.0.0.0:${API_PORT}
     volumes:
       - .:/app

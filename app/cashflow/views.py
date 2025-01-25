@@ -194,46 +194,66 @@ class EgresosDeleteAPIView(APIView):
 
 #Logistica
 
-# control/views.py
 
 class FinanzasSummaryAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, anio_id, mes_id):
         """
-        Retorna la sumatoria de ingresos, egresos, el disponible y la cantidad total de transacciones
-        para un usuario, año y mes específicos.
+        Retorna los ingresos, egresos del mes específico, el disponible acumulado,
+        y la cantidad total de transacciones hasta el mes actual para el usuario.
         """
         try:
             usuario = request.user
 
             # Verificar que el año y mes existan
             anio = AnioUsuario.objects.get(id=anio_id)
-            mes = Mes.objects.get(id=mes_id)
+            mes_actual = Mes.objects.get(id=mes_id)
 
-            # Filtrar ingresos y egresos activos para el usuario, año y mes
-            ingresos_qs = Ingresos.objects.filter(
+            # Filtrar ingresos y egresos exclusivamente para el mes actual
+            ingresos_mes_qs = Ingresos.objects.filter(
                 usuario=usuario,
                 anio=anio,
-                mes=mes,
+                mes=mes_actual,
                 activo=True
             )
-            egresos_qs = Egresos.objects.filter(
+            egresos_mes_qs = Egresos.objects.filter(
                 usuario=usuario,
                 anio=anio,
-                mes=mes,
+                mes=mes_actual,
                 activo=True
             )
 
-            # Calcular las sumatorias
-            sum_ingresos = ingresos_qs.aggregate(total=Sum('monto'))['total'] or 0
-            sum_egresos = egresos_qs.aggregate(total=Sum('monto'))['total'] or 0
-            disponible = sum_ingresos - sum_egresos
+            # Filtrar ingresos y egresos acumulados hasta el mes actual para calcular el disponible
+            ingresos_acumulados_qs = Ingresos.objects.filter(
+                usuario=usuario,
+                anio=anio,
+                mes__id__lte=mes_id,
+                activo=True
+            )
+            egresos_acumulados_qs = Egresos.objects.filter(
+                usuario=usuario,
+                anio=anio,
+                mes__id__lte=mes_id,
+                activo=True
+            )
 
-            # Calcular la cantidad de transacciones
-            count_ingresos = ingresos_qs.count()
-            count_egresos = egresos_qs.count()
+            # Calcular las sumatorias del mes actual
+            sum_ingresos = ingresos_mes_qs.aggregate(total=Sum('monto'))['total'] or 0
+            sum_egresos = egresos_mes_qs.aggregate(total=Sum('monto'))['total'] or 0
+
+            # Calcular el disponible acumulado
+            total_ingresos_acumulados = ingresos_acumulados_qs.aggregate(total=Sum('monto'))['total'] or 0
+            total_egresos_acumulados = egresos_acumulados_qs.aggregate(total=Sum('monto'))['total'] or 0
+            disponible = total_ingresos_acumulados - total_egresos_acumulados
+
+            # Calcular la cantidad de transacciones para el mes actual
+            count_ingresos = ingresos_mes_qs.count()
+            count_egresos = egresos_mes_qs.count()
             transaccion = count_ingresos + count_egresos
+
+            # Obtener el valor del campo 'mes'
+            mes_actual_valor = mes_actual.mes
 
         except (AnioUsuario.DoesNotExist, Mes.DoesNotExist):
             # Si el año o mes no existen, establecer todos los campos en 0
@@ -241,6 +261,7 @@ class FinanzasSummaryAPIView(APIView):
             sum_egresos = 0
             disponible = 0
             transaccion = 0
+            mes_actual_valor = "Desconocido"
 
         except Exception as e:
             # Manejar cualquier otro error inesperado
@@ -249,14 +270,18 @@ class FinanzasSummaryAPIView(APIView):
             sum_egresos = 0
             disponible = 0
             transaccion = 0
+            mes_actual_valor = "Error"
 
         # Preparar los datos para el serializer
         data = {
-            'sum_ingresos': sum_ingresos,
-            'sum_egresos': sum_egresos,
-            'disponible': disponible,
-            'transaccion': transaccion
+            'sum_ingresos': sum_ingresos,  # Solo del mes actual
+            'sum_egresos': sum_egresos,    # Solo del mes actual
+            'disponible': disponible,      # Acumulado hasta el mes actual
+            'transaccion': transaccion,    # Cantidad de transacciones del mes actual
+            'mes_actual': mes_actual_valor  # Usar el campo 'mes' directamente
         }
 
         serializer = FinanzasSummarySerializer(data)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+

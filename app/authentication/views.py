@@ -22,7 +22,7 @@ class ValidateEmail(APIView):
 
     def post(self, request, token=None):
         try:
-            # Decodifica el token JWT
+
             decoded_token = UntypedToken(token)
             user_id = decoded_token.get('user_id')
 
@@ -107,13 +107,13 @@ class updateResetPassword(APIView):
 
     @swagger_auto_schema(request_body=updateResetPasswordSwagger('', 'Update reset password', 'User account')[1])
     def post(self, request, token, format=None):
-        # Validar datos enviados en el cuerpo de la solicitud
+
         serializer = PasswordSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Decodificar el token y extraer el user_id
+
             payload = AccessToken(token).payload
             user_id = payload.get('user_id')
         except TokenError:

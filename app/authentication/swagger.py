@@ -85,7 +85,7 @@ def resetPasswordSwagger(title, description, name):
     return response_post, request_body_post
 
 
-# Update Reset password
+
 def updateResetPasswordSwagger(title, description, name):
     fieldRequired = ['email']
 

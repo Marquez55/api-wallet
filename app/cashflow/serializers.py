@@ -75,3 +75,4 @@ class FinanzasSummarySerializer(serializers.Serializer):
     sum_egresos = serializers.DecimalField(max_digits=15, decimal_places=2)
     disponible = serializers.DecimalField(max_digits=15, decimal_places=2)
     transaccion = serializers.IntegerField()
+    mes_actual = serializers.CharField(max_length=20)  # Campo adicional para el mes actual

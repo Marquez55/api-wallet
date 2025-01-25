@@ -30,7 +30,7 @@ class Mes(models.Model):
         return self.mes
 
 
-#Se crean en base al usuario una es la categoria y la otra es la subcategoria
+
 class Categoria(models.Model):
     usuario = models.ForeignKey(User, on_delete=models.CASCADE)
     nombre = models.CharField(max_length=300)
@@ -44,7 +44,7 @@ class Categoria(models.Model):
         self.activo = False
         self.save()
 
-#Subcategorias para categorias principales
+
 class Subcategoria(models.Model):
     usuario = models.ForeignKey(User, on_delete=models.CASCADE)
     categoria = models.ForeignKey(Categoria, on_delete=models.CASCADE, related_name='subcategorias')
@@ -61,7 +61,7 @@ class Subcategoria(models.Model):
 
 
 
-#Identificar si es pasivo o activo
+
 class Tipo(models.Model):
 
     tipo = models.CharField(max_length=300)

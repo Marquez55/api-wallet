@@ -25,7 +25,7 @@ class EmailSerializer(serializers.Serializer):
     extra_kwargs = {
         'email': {
             'write_only': True,
-            'required': True,  # Indica que el campo es requerido, por si no se especifico en el modelo
+            'required': True,
         }
     }
 
@@ -35,6 +35,6 @@ class PasswordSerializer(serializers.Serializer):
     extra_kwargs = {
         'password': {
             'write_only': True,
-            'required': True,  # Indica que el campo es requerido, por si no se especifico en el modelo
+            'required': True,
         }
     }
