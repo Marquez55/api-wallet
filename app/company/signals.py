@@ -1,7 +1,5 @@
 from django.db.models.signals import post_migrate
 from django.dispatch import receiver
-from django.db.models.signals import post_migrate
-from django.dispatch import receiver
 from app.company.models import Company
 from app.user.models import Rol, Perfil
 from django.contrib.auth.models import User
