@@ -3,12 +3,24 @@ from rest_framework import status, generics
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from app.catalogos.models import AnioUsuario, Mes, TipoIngreso, Categoria, Subcategoria
+from app.user.models import Rol
 from django.contrib.auth.models import User
 from app.catalogos.serializers import AnioUsuarioSerializer, CategoriaSerializer, SubcategoriaSerializer
 from django.db import transaction
 
 
 
+class RolesListAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        """
+        Listado de roles activos
+        """
+        roles = Rol.objects.filter(activo=True).values("id", "clave", "descripcion", "activo")
+
+        res = {"roles": list(roles)}
+        return Response(data=res, status=status.HTTP_200_OK)
 
 
 class TipoIngresoAPIView(APIView):
@@ -207,11 +219,17 @@ class CategoriaUpdateDeleteAPIView(APIView):
     def delete(self, request, pk):
         """
             Eliminar una categoría y sus subcategorías asociadas lógicamente
+            Si la categoría está marcada como favorita, se desmarcará antes de eliminarla.
         """
         try:
             categoria = Categoria.objects.get(pk=pk, usuario=request.user, activo=True)
         except Categoria.DoesNotExist:
             return Response({"error": "Categoría no encontrada."}, status=status.HTTP_404_NOT_FOUND)
+
+            # Desmarcar como favorita antes de eliminar
+        if categoria.favorito:
+            categoria.favorito = False
+            categoria.save(update_fields=["favorito"])
 
         # Eliminar lógicamente la categoría
         categoria.eliminar_logicamente()

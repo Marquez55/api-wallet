@@ -5,7 +5,7 @@ from app.email.sendEmail import sendEmail
 def nuevoAdminMail(user, token, password):
     """
         Función que se encarga de enviar un mail al usuario
-        para recuperar su contraseña
+        para activar su cuenta administrativa
     """
 
     emailTo = user.email

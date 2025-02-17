@@ -14,7 +14,8 @@ def create_roles_and_company(sender, **kwargs):
         # Crear roles si no existen
         Rol.objects.create(clave='Empresa', descripcion='Empresa', activo=True)
         Rol.objects.create(clave='Administrador', descripcion='Administrador', activo=True)
-        Rol.objects.create(clave='Editor', descripcion='Editor', activo=True)
+        Rol.objects.create(clave='Usuario', descripcion='Usuario', activo=True)
+        Rol.objects.create(clave='Nexuz', descripcion='Nexuz', activo=True)
 
     # Verificar si la empresa ya existe
     if Company.objects.count() == 0:

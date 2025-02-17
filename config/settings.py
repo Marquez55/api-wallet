@@ -32,7 +32,8 @@ INSTALLED_APPS = [
     'app.authentication',
     'app.catalogos',
     'app.cashflow',
-    'app.resume'
+    'app.resume',
+    'app.utils'
 ]
 
 # Middleware

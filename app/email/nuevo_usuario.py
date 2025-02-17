@@ -4,10 +4,10 @@ from config.settings import URL_APP, DEFAULT_FROM_EMAIL, EMAIL_DEFAULT_ACTIVE, E
 from app.email.sendEmail import sendEmail
 
 
-def nuevoUsuarioMail(user, token):
+def nuevoUsuarioMail(user, token, password):
     """
         Función que se encarga de enviar un mail al usuario 
-        para recuperar su contraseña
+        para activar su cuenta
     """
 
     emailTo = user.email
@@ -22,7 +22,8 @@ def nuevoUsuarioMail(user, token):
     data = {
         'usuario': {
             'first_name': user.first_name,
-            'last_name': user.last_name
+            'last_name': user.last_name,
+            'password': password
         },
         'url': URL_APP + segmento_url,
         'domain': URL_APP,

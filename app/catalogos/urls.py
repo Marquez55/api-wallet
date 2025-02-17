@@ -23,4 +23,6 @@ urlpatterns = [
     #Servicios de Subcategorias
     path('categorias/<int:categoria_id>/subcategorias/', views.SubcategoriaListCreateAPIView.as_view(), name='subcategoria-list-create'),
     path('subcategorias/<int:pk>/', views.SubcategoriaUpdateDeleteAPIView.as_view(), name='subcategoria-update-delete'),
+
+    path('roles', views.RolesListAPIView.as_view(), name='list_roles')
 ]
