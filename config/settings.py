@@ -33,7 +33,8 @@ INSTALLED_APPS = [
     'app.catalogos',
     'app.cashflow',
     'app.resume',
-    'app.utils'
+    'app.utils',
+    'app.financing',
 ]
 
 # Middleware

@@ -40,7 +40,9 @@ urlpatterns = [
 
     path('control/', include('app.cashflow.urls')),
 
-    path('dashboard/', include('app.resume.urls'))
+    path('dashboard/', include('app.resume.urls')),
+
+    path('financing/', include('app.financing.urls')),
 
 
 ]
