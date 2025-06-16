@@ -5,6 +5,7 @@ from rest_framework import status
 from app.financing.models import Prestamo, PagosPrestamo
 from app.financing.serializers import PrestamoSerializer, PagosPrestamoSerializer
 from django.db import transaction
+from django.db.models import Sum
 
 class PrestamoListCreateAPIView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -127,3 +128,33 @@ class PagosUpdateDeleteAPIView(APIView):
 
         pago.eliminar_logicamente()
         return Response({"message": "Pago eliminado correctamente."}, status=status.HTTP_204_NO_CONTENT)
+
+
+
+class ResumenGeneralPrestamosAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """
+        Retorna el resumen general de préstamos y pagos del usuario autenticado
+        """
+        usuario = request.user
+
+        total_prestamos = Prestamo.objects.filter(
+            usuario=usuario,
+            activo=True
+        ).aggregate(total=Sum('monto'))['total'] or 0
+
+        total_pagado = PagosPrestamo.objects.filter(
+            usuario=usuario,
+            activo=True,
+            prestamo__activo=True
+        ).aggregate(total=Sum('monto'))['total'] or 0
+
+        total_restante = total_prestamos - total_pagado
+
+        return Response({
+            'total_prestamos': round(total_prestamos, 2),
+            'total_pagado': round(total_pagado, 2),
+            'total_restante': round(total_restante, 2)
+        })

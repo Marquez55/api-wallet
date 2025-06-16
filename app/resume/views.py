@@ -149,48 +149,46 @@ class IngresosEgresosMensualesAPIView(APIView):
         Devuelve los ingresos y egresos mensuales del usuario en el año activo.
         Si no hay un año activo, retorna 0 para todos los valores.
         """
-
         anio_activo = AnioUsuario.objects.filter(usuario=request.user, activo=True).first()
         if not anio_activo:
             # Si no hay un año activo, devolver 0 para todos los meses
             meses = Mes.objects.all().order_by("id")  # Aseguramos el orden de enero a diciembre
-            respuesta = {mes.mes[:2]: {"ingresos": 0, "egresos": 0} for mes in meses}
-            return Response({"anio": None, "mensual": respuesta}, status=200)
-
+            respuesta = {mes.id: {"ingresos": 0, "egresos": 0} for mes in meses}
+            respuesta_final = {mes.mes[:3]: valores for mes, valores in zip(meses, respuesta.values())}
+            return Response({"anio": None, "mensual": respuesta_final}, status=200)
 
         meses = Mes.objects.all().order_by("id")
+        respuesta_mensual = {mes.id: {"ingresos": 0, "egresos": 0} for mes in meses}
 
-
-        respuesta_mensual = {mes.mes[:2]: {"ingresos": 0, "egresos": 0} for mes in meses}
-
-
+        # Obtener ingresos y egresos mensuales
         ingresos_mensuales = (
             Ingresos.objects.filter(usuario=request.user, anio=anio_activo, activo=True)
-            .values("mes__mes")
+            .values("mes__id")  # Usar el ID del mes
             .annotate(total=Coalesce(Sum("monto", output_field=DecimalField()), Value(0, output_field=DecimalField())))
         )
-
 
         egresos_mensuales = (
             Egresos.objects.filter(usuario=request.user, anio=anio_activo, activo=True)
-            .values("mes__mes")
+            .values("mes__id")  # Usar el ID del mes
             .annotate(total=Coalesce(Sum("monto", output_field=DecimalField()), Value(0, output_field=DecimalField())))
         )
 
-
+        # Asignar los valores a respuesta_mensual
         for ingreso in ingresos_mensuales:
-            mes_mes = ingreso["mes__mes"][:2]
-            if mes_mes in respuesta_mensual:
-                respuesta_mensual[mes_mes]["ingresos"] = ingreso["total"]
-
+            mes_id = ingreso["mes__id"]
+            if mes_id in respuesta_mensual:
+                respuesta_mensual[mes_id]["ingresos"] = ingreso["total"]
 
         for egreso in egresos_mensuales:
-            mes_mes = egreso["mes__mes"][:2]
-            if mes_mes in respuesta_mensual:
-                respuesta_mensual[mes_mes]["egresos"] = egreso["total"]
+            mes_id = egreso["mes__id"]
+            if mes_id in respuesta_mensual:
+                respuesta_mensual[mes_id]["egresos"] = egreso["total"]
+
+        # Opcional: Convertir a nombre de mes ([:3]) para la respuesta final
+        respuesta_mensual_final = {mes.mes[:3]: respuesta_mensual[mes.id] for mes in meses}
 
         # Respuesta final
-        return Response({"anio": anio_activo.anio, "mensual": respuesta_mensual}, status=200)
+        return Response({"anio": anio_activo.anio, "mensual": respuesta_mensual_final}, status=200)
 
 
 
@@ -206,29 +204,28 @@ class IngresosMensualesSalarioAPIView(APIView):
 
         anio_activo = AnioUsuario.objects.filter(usuario=request.user, activo=True).first()
         if not anio_activo:
-
             meses = Mes.objects.all().order_by("id")
-            respuesta = {mes.mes[:2]: {"salario": 0} for mes in meses}
+            respuesta = {mes.id: {"salario": 0} for mes in meses}
+            respuesta_final = {mes.mes[:3]: respuesta[mes.id] for mes in meses}  # Convertir ID a nombres de meses
             return Response(
                 {
                     "anio": None,
-                    "mensual": respuesta,
+                    "mensual": respuesta_final,
                     "total_salario": 0,
-                    "otros": 0
+                    "otros": 0,
                 },
-                status=200
+                status=200,
             )
-
 
         meses = Mes.objects.all().order_by("id")
 
+        # Crear la respuesta inicial basada en los IDs de los meses
+        respuesta_mensual = {mes.id: {"salario": 0} for mes in meses}
 
-        respuesta_mensual = {mes.mes[:2]: {"salario": 0} for mes in meses}
-
-
+        # Excluir el tipo de ingreso con id=4
         tipos_salario = TipoIngreso.objects.exclude(id=4)
 
-
+        # Obtener los ingresos mensuales por tipos de salario
         ingresos_mensuales = (
             Ingresos.objects.filter(
                 usuario=request.user,
@@ -236,7 +233,7 @@ class IngresosMensualesSalarioAPIView(APIView):
                 activo=True,
                 tipoingreso__in=tipos_salario,  # Filtrar por tipos válidos
             )
-            .values("mes__mes")
+            .values("mes__id")  # Usar ID del mes
             .annotate(
                 total_salario=Coalesce(
                     Sum("monto", output_field=DecimalField()), Value(0, output_field=DecimalField())
@@ -244,7 +241,7 @@ class IngresosMensualesSalarioAPIView(APIView):
             )
         )
 
-
+        # Obtener los totales generales
         total_salario = (
             Ingresos.objects.filter(
                 usuario=request.user,
@@ -258,7 +255,6 @@ class IngresosMensualesSalarioAPIView(APIView):
                 )
             )["total"]
         )
-
 
         total_otros = (
             Ingresos.objects.filter(
@@ -274,19 +270,21 @@ class IngresosMensualesSalarioAPIView(APIView):
             )["total"]
         )
 
-
+        # Asignar los ingresos mensuales al diccionario
         for ingreso in ingresos_mensuales:
-            mes_mes = ingreso["mes__mes"][:2]
-            if mes_mes in respuesta_mensual:
-                respuesta_mensual[mes_mes]["salario"] = ingreso["total_salario"]
+            mes_id = ingreso["mes__id"]  # Usar el ID del mes
+            if mes_id in respuesta_mensual:
+                respuesta_mensual[mes_id]["salario"] = ingreso["total_salario"]
 
+        # Convertir el diccionario a una estructura con nombres de los meses
+        respuesta_mensual_final = {mes.mes[:3]: respuesta_mensual[mes.id] for mes in meses}
 
         return Response(
             {
                 "anio": anio_activo.anio,
-                "mensual": respuesta_mensual,
+                "mensual": respuesta_mensual_final,
                 "total_salario": total_salario,
                 "otros": total_otros,
             },
-            status=200
+            status=200,
         )

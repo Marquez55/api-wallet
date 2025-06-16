@@ -9,4 +9,6 @@ urlpatterns = [
 
     path('pagos-prestamo/<int:prestamo_id>/', views.PagosPrestamoListCreateAPIView.as_view(), name='pagos-prestamo-list-create'),
     path('pagos/<int:pk>/', views.PagosUpdateDeleteAPIView.as_view(), name='pagos-update-delete'),
+
+    path('prestamos/total/', views.ResumenGeneralPrestamosAPIView.as_view(), name='total-prestamos'),
 ]
