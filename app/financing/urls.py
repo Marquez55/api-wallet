@@ -11,4 +11,9 @@ urlpatterns = [
     path('pagos/<int:pk>/', views.PagosUpdateDeleteAPIView.as_view(), name='pagos-update-delete'),
 
     path('prestamos/total/', views.ResumenGeneralPrestamosAPIView.as_view(), name='total-prestamos'),
+
+
+
+    path('conceptos/', views.ConceptoPrestamoAPIView.as_view(), name='concepto-prestamo-list-create'),
+    path('conceptos-prestamo/<int:pk>/', views.ConceptoPrestamoAPIView.as_view(), name='concepto-prestamo-update-delete'),
 ]

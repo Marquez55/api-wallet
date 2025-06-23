@@ -2,10 +2,11 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from app.financing.models import Prestamo, PagosPrestamo
-from app.financing.serializers import PrestamoSerializer, PagosPrestamoSerializer
+from app.financing.models import Prestamo, PagosPrestamo, ConceptoPrestamo
+from app.financing.serializers import PrestamoSerializer, PagosPrestamoSerializer, ConceptoPrestamoSerializer
 from django.db import transaction
 from django.db.models import Sum
+from django.shortcuts import get_object_or_404
 
 class PrestamoListCreateAPIView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -71,14 +72,14 @@ class PagosPrestamoListCreateAPIView(APIView):
 
     def get(self, request, prestamo_id):
         """
-        Listar pagos activos de un préstamo
+        Listar pagos activos de un préstamo en orden descendente por fecha
         """
         try:
             prestamo = Prestamo.objects.get(pk=prestamo_id, usuario=request.user, activo=True)
         except Prestamo.DoesNotExist:
             return Response({"error": "Préstamo no encontrado."}, status=status.HTTP_404_NOT_FOUND)
 
-        pagos = PagosPrestamo.objects.filter(prestamo=prestamo, activo=True)
+        pagos = PagosPrestamo.objects.filter(prestamo=prestamo, activo=True).order_by('-fecha_pago')
         serializer = PagosPrestamoSerializer(pagos, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -158,3 +159,43 @@ class ResumenGeneralPrestamosAPIView(APIView):
             'total_pagado': round(total_pagado, 2),
             'total_restante': round(total_restante, 2)
         })
+
+
+class ConceptoPrestamoAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        prestamo_id = request.query_params.get('prestamo')
+        if not prestamo_id:
+            return Response(
+                {'error': 'Debe proporcionar el parámetro ?prestamo=ID'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        conceptos = ConceptoPrestamo.objects.filter(
+            prestamo_id=prestamo_id,
+            activo=True
+        ).order_by('-fecha')
+
+        serializer = ConceptoPrestamoSerializer(conceptos, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = ConceptoPrestamoSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, pk):
+        concepto = get_object_or_404(ConceptoPrestamo, pk=pk, activo=True)
+        serializer = ConceptoPrestamoSerializer(concepto, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk):
+        concepto = get_object_or_404(ConceptoPrestamo, pk=pk, activo=True)
+        concepto.eliminar_logicamente()
+        return Response(status=status.HTTP_204_NO_CONTENT)

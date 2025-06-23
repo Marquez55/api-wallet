@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.db import models
-from app.financing.models import Prestamo, PagosPrestamo
+from app.financing.models import Prestamo, PagosPrestamo, ConceptoPrestamo
 
 
 class PrestamoSerializer(serializers.ModelSerializer):
@@ -24,3 +24,11 @@ class PagosPrestamoSerializer(serializers.ModelSerializer):
     class Meta:
         model = PagosPrestamo
         fields = ['id', 'prestamo', 'monto', 'fecha_pago']
+
+
+
+class ConceptoPrestamoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ConceptoPrestamo
+        fields = '__all__'
+        read_only_fields = ['id', 'activo']
