@@ -7,6 +7,7 @@ from app.financing.serializers import PrestamoSerializer, PagosPrestamoSerialize
 from django.db import transaction
 from django.db.models import Sum
 from django.shortcuts import get_object_or_404
+from datetime import date
 
 class PrestamoListCreateAPIView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -29,6 +30,33 @@ class PrestamoListCreateAPIView(APIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+class PrestamoRetrieveAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request, prestamo_id):
+        """
+        Recupera los datos individuales de un préstamo por su ID.
+        Restringido al usuario autenticado dueño del préstamo.
+        """
+        try:
+            prestamo = Prestamo.objects.get(id=prestamo_id, usuario=request.user, activo=True)
+        except Prestamo.DoesNotExist:
+            return Response(
+                {'error': 'Préstamo no encontrado o no tiene permisos para verlo'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = PrestamoSerializer(prestamo)
+        data = serializer.data
+
+        # Agregar fecha actual
+        data['fecha_actual'] = date.today()
+
+        # Calcular estatus en base al total_restante
+        total_restante = data.get('total_restante', 0)
+        data['estatus'] = 'Pendiente' if total_restante != 0 else 'Liquidado'
+
+        return Response(data, status=status.HTTP_200_OK)
 
 class PrestamoUpdateDeleteAPIView(APIView):
     permission_classes = (IsAuthenticated,)
