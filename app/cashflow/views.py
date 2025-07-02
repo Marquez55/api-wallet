@@ -9,7 +9,7 @@ from app.cashflow.serializers import IngresosSerializer, EgresosSerializer, Fina
 from django.shortcuts import get_object_or_404
 from django.db.models import Sum
 from app.utils.paginator import CustomPagination
-
+from datetime import date
 
 
 
@@ -289,4 +289,64 @@ class FinanzasSummaryAPIView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+class EgresosResumenPorCategoriaAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
 
+    def get(self, request, anio_id, mes_id):
+        """
+        Devuelve el resumen de egresos por categoría y subcategoría,
+        incluyendo el total general por categoría.
+        """
+        # Filtrar egresos activos por año, mes y usuario
+        egresos = Egresos.objects.filter(
+            anio_id=anio_id,
+            mes_id=mes_id,
+            activo=True,
+            usuario=request.user
+        ).select_related('categoria', 'subcategoria')
+
+        # Agrupar por categoría y subcategoría, sumando montos
+        agrupados = egresos.values(
+            'categoria__id',
+            'categoria__nombre',
+            'subcategoria__id',
+            'subcategoria__nombre'
+        ).annotate(
+            total_subcategoria=Sum('monto')
+        ).order_by('categoria__nombre', 'subcategoria__nombre')
+
+        # Procesar en estructura de salida por categoría
+        resultado = {}
+        for item in agrupados:
+            cat_id = item['categoria__id']
+            cat_nombre = item['categoria__nombre']
+            sub_id = item['subcategoria__id']
+            sub_nombre = item['subcategoria__nombre']
+            total_sub = item['total_subcategoria']
+
+            if cat_id not in resultado:
+                resultado[cat_id] = {
+                    'categoria': cat_nombre,
+                    'total_categoria': 0,
+                    'subcategorias': []
+                }
+
+            resultado[cat_id]['subcategorias'].append({
+                'subcategoria_id': sub_id,
+                'subcategoria': sub_nombre,
+                'total_egreso': total_sub
+            })
+
+            resultado[cat_id]['total_categoria'] += total_sub
+
+        # Convertir dict a lista para serializarlo como JSON
+        salida = list(resultado.values())
+
+        fecha_actual = date.today().isoformat()
+
+        return Response({
+            'status': 'success',
+            'message': 'Resumen de egresos por categoría y subcategoría',
+            'fecha_actual': fecha_actual,
+            'data': salida
+        })

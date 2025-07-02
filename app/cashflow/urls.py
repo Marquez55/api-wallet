@@ -20,4 +20,7 @@ urlpatterns = [
 
     #Finanzas
     path('finanzas/<int:anio_id>/<int:mes_id>/', views.FinanzasSummaryAPIView.as_view(), name='finanzas-summary'),
+
+    # Reportes
+   path('egresos/<int:anio_id>/<int:mes_id>/resumen-categorias/', views.EgresosResumenPorCategoriaAPIView.as_view(), name='egresos-resumen-categorias'),
 ]
