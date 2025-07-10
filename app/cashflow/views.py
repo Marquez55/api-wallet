@@ -1,4 +1,5 @@
 from rest_framework.views import APIView
+from collections import OrderedDict
 from rest_framework import status, generics
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -295,9 +296,8 @@ class EgresosResumenPorCategoriaAPIView(APIView):
     def get(self, request, anio_id, mes_id):
         """
         Devuelve el resumen de egresos por categoría y subcategoría,
-        incluyendo el total general por categoría.
+        ordenados de mayor a menor.
         """
-        # Filtrar egresos activos por año, mes y usuario
         egresos = Egresos.objects.filter(
             anio_id=anio_id,
             mes_id=mes_id,
@@ -305,7 +305,6 @@ class EgresosResumenPorCategoriaAPIView(APIView):
             usuario=request.user
         ).select_related('categoria', 'subcategoria')
 
-        # Agrupar por categoría y subcategoría, sumando montos
         agrupados = egresos.values(
             'categoria__id',
             'categoria__nombre',
@@ -315,7 +314,6 @@ class EgresosResumenPorCategoriaAPIView(APIView):
             total_subcategoria=Sum('monto')
         ).order_by('categoria__nombre', 'subcategoria__nombre')
 
-        # Procesar en estructura de salida por categoría
         resultado = {}
         for item in agrupados:
             cat_id = item['categoria__id']
@@ -339,14 +337,26 @@ class EgresosResumenPorCategoriaAPIView(APIView):
 
             resultado[cat_id]['total_categoria'] += total_sub
 
-        # Convertir dict a lista para serializarlo como JSON
-        salida = list(resultado.values())
+        # ✅ Ordenar subcategorías de cada categoría de mayor a menor
+        for cat in resultado.values():
+            cat['subcategorias'] = sorted(
+                cat['subcategorias'],
+                key=lambda x: x['total_egreso'],
+                reverse=True
+            )
+
+        # ✅ Convertir dict a lista y ordenar categorías de mayor a menor
+        salida = sorted(
+            resultado.values(),
+            key=lambda x: x['total_categoria'],
+            reverse=True
+        )
 
         fecha_actual = date.today().isoformat()
 
         return Response({
             'status': 'success',
-            'message': 'Resumen de egresos por categoría y subcategoría',
+            'message': 'Resumen de egresos por categoría y subcategoría ordenado',
             'fecha_actual': fecha_actual,
             'data': salida
         })
