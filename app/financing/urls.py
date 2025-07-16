@@ -5,8 +5,9 @@ from app.financing import views
 
 urlpatterns = [
     path('prestamos/', views.PrestamoListCreateAPIView.as_view(), name='prestamo-list-create'),
-    path('prestamos/<int:prestamo_id>/', views.PrestamoRetrieveAPIView.as_view(), name='prestamo-detail'),
     path('prestamos/<int:pk>/', views.PrestamoUpdateDeleteAPIView.as_view(), name='prestamo-update-delete'),
+    path('prestamos/<int:prestamo_id>/', views.PrestamoRetrieveAPIView.as_view(), name='prestamo-detail'),
+
 
 
 
