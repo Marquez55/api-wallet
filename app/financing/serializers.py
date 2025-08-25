@@ -158,6 +158,24 @@ class ComprasTarjetaCreditoSerializer(serializers.ModelSerializer):
     def get_liquidada(self, obj: ComprasTarjetaCredito) -> bool:
         return self.get_meses_restantes(obj) == 0
 
+    @transaction.atomic
+    def create(self, validated_data):
+        # si validas monto > 0, déjalo; aquí solo creamos y recalculamos
+        compra = super().create(validated_data)
+        recalc_saldo_tarjeta(compra.tarjeta_credito_id)
+        return compra
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        old_tarjeta_id = instance.tarjeta_credito_id
+        instance = super().update(instance, validated_data)
+        # recálculo para la tarjeta destino
+        recalc_saldo_tarjeta(instance.tarjeta_credito_id)
+        # y si moviste la compra a otra tarjeta, recalcula la original
+        if old_tarjeta_id != instance.tarjeta_credito_id:
+            recalc_saldo_tarjeta(old_tarjeta_id)
+        return instance
+
 
 
 # --- Pagos ---
