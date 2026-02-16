@@ -200,6 +200,7 @@ class ComprasTarjetaCreditoSerializer(serializers.ModelSerializer):
 
 # --- Pagos ---
 class PagoTarjetaCreditoSerializer(serializers.ModelSerializer):
+    nombre_tarjeta = serializers.CharField(source='tarjeta_credito.nombre', read_only=True)
     # si el front quiere especificar, lo conserva:
     pago_compras = serializers.PrimaryKeyRelatedField(
         queryset=ComprasTarjetaCredito.objects.all(), many=True, required=False
@@ -207,7 +208,7 @@ class PagoTarjetaCreditoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = PagoTarjetaCredito
-        fields = ['id','tarjeta_credito','pago_compras','monto','fecha_pago']
+        fields = ['id','tarjeta_credito','nombre_tarjeta','pago_compras','monto','fecha_pago']
 
     def _cuota(self, compra: ComprasTarjetaCredito) -> Decimal:
         meses = max(int(compra.meses or 1), 1)

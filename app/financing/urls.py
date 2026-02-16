@@ -35,4 +35,8 @@ urlpatterns = [
          name='pagos-list-create'),
     path('pagos-credito/<int:pk>/', views.PagoTarjetaCreditoUpdateDeleteAPIView.as_view(),
          name='pagos-update-delete'),
+
+    # Listados globales (todas las tarjetas)
+    path('compras-tarjeta/todas/', views.AllComprasTarjetaCreditoListView.as_view(), name='compras-tarjeta-list-all'),
+    path('pagos-tarjeta/todos/', views.AllPagosTarjetaCreditoListView.as_view(), name='pagos-tarjeta-list-all'),
 ]

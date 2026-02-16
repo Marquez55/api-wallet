@@ -66,7 +66,9 @@ class CatalogoAniosAPIView(APIView):
         """
         Listado de todos los años del usuario.
         """
-        anios = AnioUsuario.objects.filter(usuario=request.user)
+        anios = (
+            AnioUsuario.objects.filter(usuario=request.user)
+            .order_by("-anio"))
         serializer = AnioUsuarioSerializer(anios, many=True)
         return Response({"anios": serializer.data}, status=status.HTTP_200_OK)
 

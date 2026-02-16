@@ -427,3 +427,37 @@ class PagoTarjetaCreditoUpdateDeleteAPIView(APIView):
         pago.eliminar_logicamente()
         recalc_saldo_tarjeta(pago.tarjeta_credito_id)
         return Response({"message": "Pago eliminado correctamente."}, status=status.HTTP_200_OK)
+
+
+class AllComprasTarjetaCreditoListView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        """
+        Listado de todas las compras de todas las tarjetas del usuario,
+        ordenadas por fecha más reciente.
+        """
+        compras = (ComprasTarjetaCredito.objects
+                   .filter(tarjeta_credito__usuario=request.user, activo=True)
+                   .annotate(pagos_realizados=Count('pagos_tarjeta', filter=Q(pagos_tarjeta__activo=True)))
+                   .order_by('-fecha_compra', '-id'))
+        
+        serializer = ComprasTarjetaCreditoSerializer(compras, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class AllPagosTarjetaCreditoListView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        """
+        Listado de todos los pagos realizados a todas las tarjetas del usuario,
+        ordenados por fecha más reciente.
+        """
+        pagos = (PagoTarjetaCredito.objects
+                 .select_related('tarjeta_credito')
+                 .filter(tarjeta_credito__usuario=request.user, activo=True)
+                 .order_by('-fecha_pago', '-id'))
+        
+        serializer = PagoTarjetaCreditoSerializer(pagos, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
