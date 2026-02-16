@@ -317,12 +317,19 @@ class CardCreditoUpdateDeleteAPIView(APIView):
 
     @transaction.atomic
     def delete(self, request, pk):
-        tarjeta = get_object_or_404(CardCredito, pk=pk, usuario=request.user, activo=True)
+        tarjeta_qs = CardCredito.objects.filter(pk=pk, usuario=request.user)
+        if not tarjeta_qs.exists():
+            return Response({"detail": "No CardCredito matches the given query."}, status=status.HTTP_404_NOT_FOUND)
+        
+        tarjeta = tarjeta_qs.first()
+        if not tarjeta.activo:
+            return Response({"message": "La tarjeta ya había sido eliminada anteriormente."}, status=status.HTTP_200_OK)
+
         # eliminar lógicamente compras y pagos asociados
         ComprasTarjetaCredito.objects.filter(tarjeta_credito=tarjeta, activo=True).update(activo=False)
         PagoTarjetaCredito.objects.filter(tarjeta_credito=tarjeta, activo=True).update(activo=False)
         tarjeta.eliminar_logicamente()
-        return Response({"message": "Tarjeta y sus movimientos eliminados correctamente."}, status=status.HTTP_204_NO_CONTENT)
+        return Response({"message": "Tarjeta y sus movimientos eliminados correctamente."}, status=status.HTTP_200_OK)
 
 
 class ComprasTarjetaCreditoListCreateAPIView(APIView):
@@ -352,10 +359,7 @@ class ComprasTarjetaCreditoUpdateDeleteAPIView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def put(self, request, pk):
-        compra = get_object_or_404(ComprasTarjetaCredito, pk=pk, activo=True)
-        # Verificamos que la compra pertenezca a una tarjeta del usuario
-        if compra.tarjeta_credito.usuario != request.user:
-            return Response({"error": "No autorizado."}, status=status.HTTP_403_FORBIDDEN)
+        compra = get_object_or_404(ComprasTarjetaCredito, pk=pk, tarjeta_credito__usuario=request.user, activo=True)
         serializer = ComprasTarjetaCreditoSerializer(compra, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
@@ -363,12 +367,20 @@ class ComprasTarjetaCreditoUpdateDeleteAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, pk):
-        compra = get_object_or_404(ComprasTarjetaCredito, pk=pk, activo=True)
-        if compra.tarjeta_credito.usuario != request.user:
-            return Response({"error": "No autorizado."}, status=status.HTTP_403_FORBIDDEN)
+        # Primero buscamos la compra sin el filtro de 'activo=True' para ver si existe
+        compra_qs = ComprasTarjetaCredito.objects.filter(pk=pk, tarjeta_credito__usuario=request.user)
+        if not compra_qs.exists():
+            # Si ni siquiera existe para este usuario, 404 estándar
+            return Response({"detail": "No ComprasTarjetaCredito matches the given query."}, status=status.HTTP_404_NOT_FOUND)
+        
+        compra = compra_qs.first()
+        if not compra.activo:
+            # Si ya estaba inactiva, informamos que ya se eliminó previamente
+            return Response({"message": "La compra ya había sido eliminada anteriormente."}, status=status.HTTP_200_OK)
+
         compra.eliminar_logicamente()
         recalc_saldo_tarjeta(compra.tarjeta_credito_id)
-        return Response({"message": "Compra eliminada correctamente."}, status=status.HTTP_204_NO_CONTENT)
+        return Response({"message": "Compra eliminada correctamente."}, status=status.HTTP_200_OK)
 
 
 class PagoTarjetaCreditoListCreateAPIView(APIView):
@@ -404,7 +416,14 @@ class PagoTarjetaCreditoUpdateDeleteAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, pk):
-        pago = get_object_or_404(PagoTarjetaCredito, pk=pk, usuario=request.user, activo=True)
+        pago_qs = PagoTarjetaCredito.objects.filter(pk=pk, usuario=request.user)
+        if not pago_qs.exists():
+            return Response({"detail": "No PagoTarjetaCredito matches the given query."}, status=status.HTTP_404_NOT_FOUND)
+        
+        pago = pago_qs.first()
+        if not pago.activo:
+            return Response({"message": "El pago ya había sido eliminado anteriormente."}, status=status.HTTP_200_OK)
+
         pago.eliminar_logicamente()
         recalc_saldo_tarjeta(pago.tarjeta_credito_id)
-        return Response(status=status.HTTP_204_NO_CONTENT)  # 204 sin cuerpo es lo correcto
+        return Response({"message": "Pago eliminado correctamente."}, status=status.HTTP_200_OK)

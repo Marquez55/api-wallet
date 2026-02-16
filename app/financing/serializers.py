@@ -50,12 +50,18 @@ class ConceptoPrestamoSerializer(serializers.ModelSerializer):
 
 # --- Tarjeta de crédito ---
 class CardCreditoSerializer(serializers.ModelSerializer):
+    total_pagado = serializers.SerializerMethodField()
+
     class Meta:
         model = CardCredito
-        fields = ['id', 'nombre', 'limite', 'saldo', 'tasa_interes', 'fecha_corte', 'fecha_pago']
+        fields = ['id', 'nombre', 'limite', 'saldo', 'total_pagado', 'tasa_interes', 'fecha_corte', 'fecha_pago']
         extra_kwargs = {
             'saldo': {'read_only': True},   # el cliente no lo envía
         }
+
+    def get_total_pagado(self, obj: CardCredito) -> float:
+        total = obj.pagos.filter(activo=True).aggregate(total=Sum('monto'))['total'] or Decimal('0')
+        return float(_q2(total))
 
     # ===== helpers =====
     @staticmethod
@@ -119,12 +125,15 @@ class ComprasTarjetaCreditoSerializer(serializers.ModelSerializer):
     meses_restantes = serializers.SerializerMethodField()
     cuota_mensual   = serializers.SerializerMethodField()
     liquidada       = serializers.SerializerMethodField()
+    total_pagado    = serializers.SerializerMethodField()
+    monto_restante  = serializers.SerializerMethodField()
 
     class Meta:
         model  = ComprasTarjetaCredito
         fields = [
             'id','tarjeta_credito','descripcion','monto','fecha_compra','meses','msi',
-            'pagos_realizados','meses_restantes','cuota_mensual','liquidada'
+            'pagos_realizados','meses_restantes','cuota_mensual','liquidada',
+            'total_pagado', 'monto_restante'
         ]
 
     # ---------- helpers ----------
@@ -157,6 +166,17 @@ class ComprasTarjetaCreditoSerializer(serializers.ModelSerializer):
 
     def get_liquidada(self, obj: ComprasTarjetaCredito) -> bool:
         return self.get_meses_restantes(obj) == 0
+
+    def get_total_pagado(self, obj: ComprasTarjetaCredito) -> float:
+        pagos_count = self.get_pagos_realizados(obj)
+        cuota = self._cuota(obj)
+        total = Decimal(pagos_count) * cuota
+        return float(_q2(total))
+
+    def get_monto_restante(self, obj: ComprasTarjetaCredito) -> float:
+        total_pagado = Decimal(str(self.get_total_pagado(obj)))
+        restante = Decimal(obj.monto) - total_pagado
+        return float(_q2(max(restante, Decimal('0'))))
 
     @transaction.atomic
     def create(self, validated_data):
