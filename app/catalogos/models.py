@@ -81,3 +81,49 @@ class TipoIngreso(models.Model):
 
     def __str__(self):
         return self.ingreso
+
+
+class ProyectoEsquema(models.Model):
+
+    descripcion = models.CharField(max_length=300)
+    activo = models.BooleanField(default=True)
+
+
+    def __str__(self):
+        return self.descripcion
+
+
+class TipoServicio(models.Model):
+
+    tipo = models.CharField(max_length=300)
+    activo = models.BooleanField(default=True)
+
+
+    def __str__(self):
+        return self.ingreso
+
+
+class EstatusProyecto(models.Model):
+
+    estatus = models.CharField(max_length=300)
+    activo = models.BooleanField(default=True)
+
+
+    def __str__(self):
+        return self.ingreso
+
+
+class MetodoPago(models.Model):
+    metodo = models.CharField(max_length=300)
+    activo = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.metodo
+
+
+class TipoPago(models.Model):
+    tipo = models.CharField(max_length=300)
+    activo = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.tipo

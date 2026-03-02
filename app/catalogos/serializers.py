@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from app.catalogos.models import AnioUsuario, Categoria, Subcategoria
+from app.catalogos.models import AnioUsuario, Categoria, Subcategoria, MetodoPago, TipoPago, ProyectoEsquema, TipoServicio, EstatusProyecto
 import datetime
 
 
@@ -55,3 +55,34 @@ class CategoriaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Categoria
         fields = ['id', 'nombre', 'favorito', 'activo', 'subcategorias']
+
+
+
+class MetodoPagoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MetodoPago
+        fields = ['id', 'metodo', 'activo']
+
+
+class TipoPagoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TipoPago
+        fields = ['id', 'tipo', 'activo']
+
+
+class ProyectoEsquemaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProyectoEsquema
+        fields = ['id', 'descripcion', 'activo']
+
+
+class TipoServicioSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TipoServicio
+        fields = ['id', 'tipo', 'activo']
+
+
+class EstatusProyectoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EstatusProyecto
+        fields = ['id', 'estatus', 'activo']

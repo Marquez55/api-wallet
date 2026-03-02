@@ -2,10 +2,10 @@ from rest_framework.views import APIView
 from rest_framework import status, generics
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from app.catalogos.models import AnioUsuario, Mes, TipoIngreso, Categoria, Subcategoria
+from app.catalogos.models import AnioUsuario, Mes, TipoIngreso, Categoria, Subcategoria, MetodoPago, TipoPago, ProyectoEsquema, TipoServicio, EstatusProyecto
 from app.user.models import Rol
 from django.contrib.auth.models import User
-from app.catalogos.serializers import AnioUsuarioSerializer, CategoriaSerializer, SubcategoriaSerializer
+from app.catalogos.serializers import AnioUsuarioSerializer, CategoriaSerializer, SubcategoriaSerializer, MetodoPagoSerializer, TipoPagoSerializer, ProyectoEsquemaSerializer, TipoServicioSerializer, EstatusProyectoSerializer
 from django.db import transaction
 
 
@@ -310,3 +310,64 @@ class SubcategoriaUpdateDeleteAPIView(APIView):
 
         subcategoria.eliminar_logicamente()
         return Response({"message": "Subcategoria eliminada lógicamente."}, status=status.HTTP_204_NO_CONTENT)
+
+
+
+class MetodoPagoAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        """
+        Listado de todos los métodos de pago.
+        """
+        metodos = MetodoPago.objects.filter(activo=True)
+        serializer = MetodoPagoSerializer(metodos, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class TipoPagoAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        """
+        Listado de todos los tipos de pago.
+        """
+        tipos = TipoPago.objects.filter(activo=True)
+        serializer = TipoPagoSerializer(tipos, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class ProyectoEsquemaAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        """
+        Listado de todos los esquemas de proyecto.
+        """
+        esquemas = ProyectoEsquema.objects.filter(activo=True)
+        serializer = ProyectoEsquemaSerializer(esquemas, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class TipoServicioAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        """
+        Listado de todos los tipos de servicio.
+        """
+        tipos = TipoServicio.objects.filter(activo=True)
+        serializer = TipoServicioSerializer(tipos, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class EstatusProyectoAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        """
+        Listado de todos los estatus de proyecto.
+        """
+        estatus = EstatusProyecto.objects.filter(activo=True)
+        serializer = EstatusProyectoSerializer(estatus, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

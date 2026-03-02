@@ -24,5 +24,11 @@ urlpatterns = [
     path('categorias/<int:categoria_id>/subcategorias/', views.SubcategoriaListCreateAPIView.as_view(), name='subcategoria-list-create'),
     path('subcategorias/<int:pk>/', views.SubcategoriaUpdateDeleteAPIView.as_view(), name='subcategoria-update-delete'),
 
-    path('roles', views.RolesListAPIView.as_view(), name='list_roles')
+    path('roles', views.RolesListAPIView.as_view(), name='list_roles'),
+
+    path('metodopago', views.MetodoPagoAPIView.as_view(), name='metodo-pago'),
+    path('tipopago', views.TipoPagoAPIView.as_view(), name='tipo-pago'),
+    path('proyectoesquema', views.ProyectoEsquemaAPIView.as_view(), name='proyecto-esquema'),
+    path('tiposervicio', views.TipoServicioAPIView.as_view(), name='tipo-servicio'),
+    path('estatusproyecto', views.EstatusProyectoAPIView.as_view(), name='estatus-proyecto'),
 ]

@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     'app.resume',
     'app.utils',
     'app.financing',
+    'app.proyect',
 ]
 
 # Middleware
