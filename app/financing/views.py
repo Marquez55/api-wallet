@@ -7,14 +7,19 @@ from app.financing.serializers import PrestamoSerializer, PagosPrestamoSerialize
 from django.db import transaction
 from django.db.models import Sum, Q, Count
 from django.shortcuts import get_object_or_404
-from datetime import date
+from datetime import date, timedelta
 from app.financing.services import recalc_saldo_tarjeta
 from decimal import Decimal, ROUND_HALF_UP
 from django.utils.dateparse import parse_date
+from django.utils import timezone
 
 
 def _q2(v) -> Decimal:
     return Decimal(v).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+
+def _money(v) -> float:
+    return float(_q2(v or Decimal('0')))
 
 class PrestamoListCreateAPIView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -194,6 +199,150 @@ class ResumenGeneralPrestamosAPIView(APIView):
             'total_pagado': round(total_pagado, 2),
             'total_restante': round(total_restante, 2)
         })
+
+
+class DashboardFinancingSummaryAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        usuario = request.user
+        today = timezone.localdate()
+        start_week = today - timedelta(days=today.weekday())
+        week_days = [start_week + timedelta(days=i) for i in range(7)]
+
+        weekly_series = []
+        for day in week_days:
+            compras_dia = ComprasTarjetaCredito.objects.filter(
+                tarjeta_credito__usuario=usuario,
+                activo=True,
+                fecha_compra=day
+            ).aggregate(total=Sum('monto'))['total'] or Decimal('0')
+
+            pagos_tarjeta_dia = PagoTarjetaCredito.objects.filter(
+                usuario=usuario,
+                activo=True,
+                fecha_pago=day,
+                tarjeta_credito__activo=True
+            ).aggregate(total=Sum('monto'))['total'] or Decimal('0')
+
+            pagos_prestamo_dia = PagosPrestamo.objects.filter(
+                usuario=usuario,
+                activo=True,
+                prestamo__activo=True,
+                fecha_pago=day
+            ).aggregate(total=Sum('monto'))['total'] or Decimal('0')
+
+            weekly_series.append(_money(compras_dia + pagos_tarjeta_dia + pagos_prestamo_dia))
+
+        week_filter = {
+            'fecha_pago__gte': start_week,
+            'fecha_pago__lte': today,
+        }
+        purchase_week_filter = {
+            'fecha_compra__gte': start_week,
+            'fecha_compra__lte': today,
+        }
+
+        pagos_tarjeta_week = PagoTarjetaCredito.objects.filter(
+            usuario=usuario,
+            activo=True,
+            tarjeta_credito__activo=True,
+            **week_filter
+        )
+        pagos_prestamo_week = PagosPrestamo.objects.filter(
+            usuario=usuario,
+            activo=True,
+            prestamo__activo=True,
+            **week_filter
+        )
+        compras_week = ComprasTarjetaCredito.objects.filter(
+            tarjeta_credito__usuario=usuario,
+            tarjeta_credito__activo=True,
+            activo=True,
+            **purchase_week_filter
+        )
+        liquidaciones_week = pagos_tarjeta_week.filter(compras_liquidadas__isnull=False).distinct()
+
+        total_pagos_tarjeta = pagos_tarjeta_week.aggregate(total=Sum('monto'))['total'] or Decimal('0')
+        total_pagos_prestamo = pagos_prestamo_week.aggregate(total=Sum('monto'))['total'] or Decimal('0')
+        total_compras = compras_week.aggregate(total=Sum('monto'))['total'] or Decimal('0')
+        total_liquidado = liquidaciones_week.aggregate(total=Sum('monto'))['total'] or Decimal('0')
+        total_movimiento = total_pagos_tarjeta + total_pagos_prestamo + total_compras
+        dias_transcurridos = max((today - start_week).days + 1, 1)
+
+        return Response({
+            'weekly': {
+                'title': 'Resumen semanal',
+                'subtitle': 'Actividad promedio',
+                'series': weekly_series,
+                'total': _money(total_movimiento),
+                'average_daily': _money(total_movimiento / Decimal(dias_transcurridos)),
+                'stats': [
+                    {
+                        'id': 1,
+                        'color': 'primary',
+                        'icon': 'cash',
+                        'title': 'Pagos realizados',
+                        'subtitle': f"{pagos_tarjeta_week.count() + pagos_prestamo_week.count()} pagos esta semana",
+                        'value': f"${_money(total_pagos_tarjeta + total_pagos_prestamo):,.2f}",
+                    },
+                    {
+                        'id': 2,
+                        'color': 'success',
+                        'icon': 'credit-card',
+                        'title': 'Compras financiadas',
+                        'subtitle': f"{compras_week.count()} compras registradas",
+                        'value': f"${_money(total_compras):,.2f}",
+                    },
+                    {
+                        'id': 3,
+                        'color': 'warning',
+                        'icon': 'receipt-refund',
+                        'title': 'Liquidaciones',
+                        'subtitle': f"{liquidaciones_week.count()} compras liquidadas",
+                        'value': f"${_money(total_liquidado):,.2f}",
+                    },
+                ],
+            },
+            'payment_gateways': {
+                'title': 'Métodos de pago',
+                'subtitle': 'Origen de movimientos',
+                'items': [
+                    {
+                        'id': 1,
+                        'color': 'primary',
+                        'title': 'Tarjetas',
+                        'subtitle': f"{pagos_tarjeta_week.count()} pagos de tarjeta",
+                        'img': 'assets/images/svgs/icon-master-card.svg',
+                        'amount': f"${_money(total_pagos_tarjeta):,.2f}",
+                    },
+                    {
+                        'id': 2,
+                        'color': 'success',
+                        'title': 'Préstamos',
+                        'subtitle': f"{pagos_prestamo_week.count()} pagos registrados",
+                        'img': 'assets/images/svgs/icon-office-bag.svg',
+                        'amount': f"${_money(total_pagos_prestamo):,.2f}",
+                    },
+                    {
+                        'id': 3,
+                        'color': 'warning',
+                        'title': 'Compras',
+                        'subtitle': f"{compras_week.count()} compras nuevas",
+                        'img': 'assets/images/svgs/icon-paypal.svg',
+                        'amount': f"${_money(total_compras):,.2f}",
+                    },
+                    {
+                        'id': 4,
+                        'color': 'error',
+                        'title': 'Liquidaciones',
+                        'subtitle': f"{liquidaciones_week.count()} pagos anticipados",
+                        'img': 'assets/images/svgs/icon-pie.svg',
+                        'amount': f"${_money(total_liquidado):,.2f}",
+                    },
+                ],
+            }
+        }, status=status.HTTP_200_OK)
 
 
 class ConceptoPrestamoAPIView(APIView):

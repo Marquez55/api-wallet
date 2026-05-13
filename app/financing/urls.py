@@ -15,6 +15,7 @@ urlpatterns = [
 
     # Resumen prestamos
     path('prestamos/total/', views.ResumenGeneralPrestamosAPIView.as_view(), name='total-prestamos'),
+    path('dashboard/resumen/', views.DashboardFinancingSummaryAPIView.as_view(), name='dashboard-financing-summary'),
 
     # Conceptos prestamo
     path('conceptos/', views.ConceptoPrestamoAPIView.as_view(), name='concepto-prestamo-list-create'),
