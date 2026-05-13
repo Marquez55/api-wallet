@@ -25,6 +25,7 @@ class Perfil(models.Model):
 
     avatar = models.CharField(max_length=100, blank=True, null=True)
     theme = models.CharField(max_length=10, blank=True, null=True)
+    must_change_password = models.BooleanField(default=False)
 
     def __str__(self):
         return "{}".format(self.user.id)
@@ -44,6 +45,7 @@ class Usuario(models.Model):
         Company, null=True, on_delete=models.PROTECT, related_name='usuario_set')
     rol = models.ForeignKey(
         Rol, null=True, on_delete=models.PROTECT, related_name='usuario_rol_set')
+    must_change_password = models.BooleanField(default=False)
 
 
     def __str__(self):
@@ -61,6 +63,7 @@ class Administradores(models.Model):
         Company, null=True, on_delete=models.PROTECT, related_name='admin_set')
     rol = models.ForeignKey(
         Rol, null=True, on_delete=models.PROTECT, related_name='admin_rol_set')
+    must_change_password = models.BooleanField(default=False)
 
     def __str__(self):
         return f"administrador: {self.nombre}"
@@ -78,6 +81,7 @@ class Nexuz(models.Model):
         Company, null=True, on_delete=models.PROTECT, related_name='nexuz_set')
     rol = models.ForeignKey(
         Rol, null=True, on_delete=models.PROTECT, related_name='nexuz_rol_set')
+    must_change_password = models.BooleanField(default=False)
 
 
     def __str__(self):

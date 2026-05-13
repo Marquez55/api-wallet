@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.permissions import AllowAny
 from django.contrib.auth.models import User
+from django.db import transaction
 from app.user.serializers import UserSerializer
 from app.user.models import Perfil, Rol, Administradores, Usuario, Nexuz
 from app.utils.paginator import CustomPagination
@@ -214,6 +215,7 @@ class CreateUserAPIView(APIView):
                 rol=rol,
                 avatar=avatar,
                 theme=theme,
+                must_change_password=True,
             )
         elif rol_id == 2:  # Administrador
             perfil = Administradores(
@@ -226,6 +228,7 @@ class CreateUserAPIView(APIView):
                 rol=rol,
                 avatar=avatar,
                 theme=theme,
+                must_change_password=True,
             )
         elif rol_id == 4:  # Nexuz
             perfil = Nexuz(
@@ -238,6 +241,7 @@ class CreateUserAPIView(APIView):
                 rol=rol,
                 avatar=avatar,
                 theme=theme,
+                must_change_password=False,
             )
         else:
             return Response(
@@ -386,7 +390,8 @@ class UsuarioInfoAPIView(APIView):
                 'nombre': company.nombre,
                 'email': request.user.email,
                 'avatar': perfil.avatar,
-                'theme': perfil.theme
+                'theme': perfil.theme,
+                'mustChangePassword': perfil.must_change_password
 
             }
             return Response(data=data, status=status.HTTP_200_OK)
@@ -409,7 +414,8 @@ class UsuarioInfoAPIView(APIView):
                     'empresa': administrador.empresa_id,
                     'nombreEmpresa': company.nombre,
                     'avatar': administrador.avatar,
-                    'theme': administrador.theme
+                    'theme': administrador.theme,
+                    'mustChangePassword': administrador.must_change_password
                 }
                 return Response(data=data, status=status.HTTP_200_OK)
 
@@ -431,7 +437,8 @@ class UsuarioInfoAPIView(APIView):
                         'empresa': usuario.empresa_id,
                         'nombreEmpresa': company.nombre,
                         'avatar': usuario.avatar,
-                        'theme': usuario.theme
+                        'theme': usuario.theme,
+                        'mustChangePassword': usuario.must_change_password
                     }
                     return Response(data=data, status=status.HTTP_200_OK)
 
@@ -453,7 +460,8 @@ class UsuarioInfoAPIView(APIView):
                             'empresa': nexuz.empresa_id,
                             'nombreEmpresa': company.nombre,
                             'avatar': nexuz.avatar,
-                            'theme': nexuz.theme
+                            'theme': nexuz.theme,
+                            'mustChangePassword': nexuz.must_change_password
                         }
                         return Response(data=data, status=status.HTTP_200_OK)
 
@@ -463,6 +471,89 @@ class UsuarioInfoAPIView(APIView):
                             {"detail": "Usuario no encontrado"},
                             status=status.HTTP_404_NOT_FOUND
                         )
+
+    @transaction.atomic
+    def put(self, request):
+        data = request.data
+        auth_user = request.user
+        email = (data.get("email") or auth_user.email or "").strip()
+
+        if not email:
+            return Response(
+                {"email": "El correo electrónico es requerido."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if (
+            User.objects.filter(email=email).exclude(id=auth_user.id).exists()
+            or User.objects.filter(username=email).exclude(id=auth_user.id).exists()
+        ):
+            return Response(
+                {"email": "El correo electrónico ya está registrado en otro usuario."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            perfil = Perfil.objects.get(user_id=auth_user.id)
+            company = Company.objects.get(id=perfil.company_id)
+            nombre = (data.get("nombre") or company.nombre or "").strip()
+
+            if not nombre:
+                return Response(
+                    {"nombre": "El nombre es requerido."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            company.nombre = nombre
+            company.save()
+
+            auth_user.first_name = nombre
+            auth_user.email = email
+            auth_user.username = email
+            auth_user.save()
+
+            return self.get(request)
+
+        except Perfil.DoesNotExist:
+            perfil_usuario = None
+
+            try:
+                perfil_usuario = Administradores.objects.get(id=auth_user.id)
+            except Administradores.DoesNotExist:
+                try:
+                    perfil_usuario = Usuario.objects.get(id=auth_user.id)
+                except Usuario.DoesNotExist:
+                    try:
+                        perfil_usuario = Nexuz.objects.get(id=auth_user.id)
+                    except Nexuz.DoesNotExist:
+                        return Response(
+                            {"detail": "Usuario no encontrado"},
+                            status=status.HTTP_404_NOT_FOUND
+                        )
+
+            nombre = (data.get("nombre") or perfil_usuario.nombre or "").strip()
+            apellido_p = (data.get("apellidoP") or perfil_usuario.apellidoP or "").strip()
+            apellido_m = (data.get("apellidoM") or perfil_usuario.apellidoM or "").strip()
+
+            if not nombre:
+                return Response(
+                    {"nombre": "El nombre es requerido."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            perfil_usuario.nombre = nombre
+            perfil_usuario.apellidoP = apellido_p
+            perfil_usuario.apellidoM = apellido_m
+            perfil_usuario.email = email
+            perfil_usuario.save()
+
+            auth_user.first_name = nombre
+            auth_user.last_name = apellido_p
+            auth_user.email = email
+            auth_user.username = email
+            auth_user.save()
+
+            return self.get(request)
 
 
 

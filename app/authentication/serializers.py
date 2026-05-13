@@ -6,8 +6,8 @@ class AtuhSerializer(serializers.Serializer):
 
 
 class ChangePasswordSerializer(serializers.Serializer):
-    password = serializers.CharField(max_length=20)
-    newPassword = serializers.CharField(max_length=20)
+    password = serializers.CharField(max_length=128, required=False, allow_blank=True)
+    newPassword = serializers.CharField(max_length=128)
     extra_kwargs = {
         'password': {
             'write_only': True,

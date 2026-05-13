@@ -110,6 +110,14 @@ class ComprasTarjetaCredito(models.Model):
     fecha_compra = models.DateField()
     meses = models.PositiveIntegerField(default=1)
     msi = models.BooleanField(default=False)
+    liquidada_manualmente = models.BooleanField(default=False)
+    pago_liquidacion = models.ForeignKey(
+        'PagoTarjetaCredito',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='compras_liquidadas'
+    )
     activo = models.BooleanField(default=True)
 
     def __str__(self):

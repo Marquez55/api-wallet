@@ -29,6 +29,7 @@ urlpatterns = [
     # Compras de tarjeta
     path('compras-tarjeta/<int:tarjeta_id>/', views.ComprasTarjetaCreditoListCreateAPIView.as_view(), name='compras-tarjeta-list-create'),
     path('actualizacion-compra/<int:pk>/', views.ComprasTarjetaCreditoUpdateDeleteAPIView.as_view(), name='compras-tarjeta-update-delete'),
+    path('compras-tarjeta/<int:pk>/liquidar/', views.LiquidarCompraTarjetaAPIView.as_view(), name='compras-tarjeta-liquidar'),
 
     # Pagos de tarjeta
     path('tarjetas-credito/<int:tarjeta_id>/pagos/', views.PagoTarjetaCreditoListCreateAPIView.as_view(),

@@ -137,6 +137,10 @@ class ComprasTarjetaCreditoSerializer(serializers.ModelSerializer):
         ]
 
     # ---------- helpers ----------
+    def _esta_liquidada_manualmente(self, compra: ComprasTarjetaCredito) -> bool:
+        pago_liquidacion = getattr(compra, 'pago_liquidacion', None)
+        return bool(compra.liquidada_manualmente and pago_liquidacion and pago_liquidacion.activo)
+
     def _cuota(self, compra: ComprasTarjetaCredito) -> Decimal:
         meses = max(int(compra.meses or 1), 1)
         if compra.msi:
@@ -152,6 +156,8 @@ class ComprasTarjetaCreditoSerializer(serializers.ModelSerializer):
 
     # ---------- campos calculados ----------
     def get_pagos_realizados(self, obj: ComprasTarjetaCredito) -> int:
+        if self._esta_liquidada_manualmente(obj):
+            return max(int(obj.meses or 1), 1)
         # Si la vista anotó 'pagos_realizados', úselo para evitar N+1
         val = getattr(obj, 'pagos_realizados', None)
         if val is not None:
@@ -159,21 +165,27 @@ class ComprasTarjetaCreditoSerializer(serializers.ModelSerializer):
         return obj.pagos_tarjeta.filter(activo=True).count()
 
     def get_meses_restantes(self, obj: ComprasTarjetaCredito) -> int:
+        if self._esta_liquidada_manualmente(obj):
+            return 0
         return max(int(obj.meses or 1) - self.get_pagos_realizados(obj), 0)
 
     def get_cuota_mensual(self, obj: ComprasTarjetaCredito) -> str:
         return str(self._cuota(obj))  # como string para no romper front que espera string/number
 
     def get_liquidada(self, obj: ComprasTarjetaCredito) -> bool:
-        return self.get_meses_restantes(obj) == 0
+        return self._esta_liquidada_manualmente(obj) or self.get_meses_restantes(obj) == 0
 
     def get_total_pagado(self, obj: ComprasTarjetaCredito) -> float:
+        if self._esta_liquidada_manualmente(obj):
+            return float(_q2(Decimal(obj.monto)))
         pagos_count = self.get_pagos_realizados(obj)
         cuota = self._cuota(obj)
         total = Decimal(pagos_count) * cuota
         return float(_q2(total))
 
     def get_monto_restante(self, obj: ComprasTarjetaCredito) -> float:
+        if self._esta_liquidada_manualmente(obj):
+            return 0.0
         total_pagado = Decimal(str(self.get_total_pagado(obj)))
         restante = Decimal(obj.monto) - total_pagado
         return float(_q2(max(restante, Decimal('0'))))
@@ -222,6 +234,19 @@ class PagoTarjetaCreditoSerializer(serializers.ModelSerializer):
         den = (1 + r) ** meses - 1
         return _q2(num / den)
 
+    def _compra_esta_liquidada(self, compra: ComprasTarjetaCredito) -> bool:
+        if compra.liquidada_manualmente and compra.pago_liquidacion_id:
+            pago_liquidacion = getattr(compra, 'pago_liquidacion', None)
+            if pago_liquidacion is None:
+                pago_liquidacion = compra.pago_liquidacion
+            if pago_liquidacion and pago_liquidacion.activo:
+                return True
+
+        pagos_realizados = getattr(compra, 'pagos_realizados', None)
+        if pagos_realizados is None:
+            pagos_realizados = compra.pagos_tarjeta.filter(activo=True).count()
+        return int(pagos_realizados) >= max(int(compra.meses or 1), 1)
+
     def _auto_aplicar(self, tarjeta, monto: Decimal) -> list[ComprasTarjetaCredito]:
         """
         Devuelve la lista de compras a las que se aplicará una CUOTA completa cada una.
@@ -231,7 +256,7 @@ class PagoTarjetaCreditoSerializer(serializers.ModelSerializer):
         seleccion = []
 
         compras = (ComprasTarjetaCredito.objects
-                   .filter(tarjeta_credito=tarjeta, activo=True)
+                   .filter(tarjeta_credito=tarjeta, activo=True, liquidada_manualmente=False)
                    .annotate(pagos_realizados=Count('pagos_tarjeta', filter=Q(pagos_tarjeta__activo=True)))
                    .order_by('fecha_compra','id'))
 
@@ -265,9 +290,9 @@ class PagoTarjetaCreditoSerializer(serializers.ModelSerializer):
             compras = self._auto_aplicar(tarjeta, monto)
 
         # Validar coherencia: que todas pertenezcan a la tarjeta y estén activas
-        bad = [c for c in compras if (not c.activo) or (c.tarjeta_credito_id != tarjeta.id)]
+        bad = [c for c in compras if (not c.activo) or (c.tarjeta_credito_id != tarjeta.id) or self._compra_esta_liquidada(c)]
         if bad:
-            raise ValidationError({'pago_compras': 'Las compras deben pertenecer a la tarjeta y estar activas.'})
+            raise ValidationError({'pago_compras': 'Las compras deben pertenecer a la tarjeta, estar activas y no estar liquidadas.'})
 
         pago = super().create(validated_data)
         if compras:
@@ -295,9 +320,9 @@ class PagoTarjetaCreditoSerializer(serializers.ModelSerializer):
         if compras is not None:
             # misma validación de coherencia
             tarjeta = validated_data.get('tarjeta_credito', instance.tarjeta_credito)
-            bad = [c for c in compras if (not c.activo) or (c.tarjeta_credito_id != tarjeta.id)]
+            bad = [c for c in compras if (not c.activo) or (c.tarjeta_credito_id != tarjeta.id) or self._compra_esta_liquidada(c)]
             if bad:
-                raise ValidationError({'pago_compras': 'Las compras deben pertenecer a la tarjeta y estar activas.'})
+                raise ValidationError({'pago_compras': 'Las compras deben pertenecer a la tarjeta, estar activas y no estar liquidadas.'})
             instance.pago_compras.set(compras)
 
         recalc_saldo_tarjeta(instance.tarjeta_credito_id)

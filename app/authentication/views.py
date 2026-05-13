@@ -15,6 +15,38 @@ from app.utils.password import valid_password
 from app.authentication.serializers import ChangePasswordSerializer, EmailSerializer, PasswordSerializer
 from app.authentication.swagger import validateEmailDocs, resetPasswordSwagger, updateResetPasswordSwagger, userSwagger
 from datetime import datetime
+from app.user.models import Perfil, Administradores, Usuario, Nexuz
+
+
+def _get_password_policy_target(user):
+    user_id = user.id
+
+    try:
+        return Perfil.objects.get(user_id=user_id)
+    except Perfil.DoesNotExist:
+        pass
+
+    try:
+        return Administradores.objects.get(id=user_id)
+    except Administradores.DoesNotExist:
+        pass
+
+    try:
+        return Usuario.objects.get(id=user_id)
+    except Usuario.DoesNotExist:
+        pass
+
+    try:
+        return Nexuz.objects.get(id=user_id)
+    except Nexuz.DoesNotExist:
+        return None
+
+
+def _clear_must_change_password(user):
+    target = _get_password_policy_target(user)
+    if target and getattr(target, 'must_change_password', False):
+        target.must_change_password = False
+        target.save(update_fields=['must_change_password'])
 
 
 class ValidateEmail(APIView):
@@ -59,14 +91,22 @@ class ChangePassword(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        pass_valid = authenticate(username=request.user, password=request.data.get('password'))
+        target = _get_password_policy_target(request.user)
+        must_change_password = bool(target and getattr(target, 'must_change_password', False))
 
-        if pass_valid is None:
+        current_password = request.data.get('password')
+        if not must_change_password:
+            pass_valid = authenticate(username=request.user.username, password=current_password)
+        else:
+            pass_valid = True
+
+        if not pass_valid:
             return Response(data={'message': 'La contraseña actual es incorrecta'}, status=status.HTTP_400_BAD_REQUEST)
 
         if actualizarPassCorrecto(request.user.id, request.data.get('newPassword')) == False:
             return BAD_REQUEST("newPassword", 'No cumple con los requisitos minimos solicitados')
 
+        _clear_must_change_password(request.user)
         return Response(status=status.HTTP_201_CREATED, data={'result': 'El password se actualizo de forma correcta'})
 
 
@@ -135,6 +175,7 @@ class updateResetPassword(APIView):
 
         user.set_password(new_password)
         user.save()
+        _clear_must_change_password(user)
 
         return Response({"result": "La contraseña se actualizó correctamente"}, status=status.HTTP_201_CREATED)
 

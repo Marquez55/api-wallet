@@ -9,6 +9,12 @@ from django.db.models import Sum, Q, Count
 from django.shortcuts import get_object_or_404
 from datetime import date
 from app.financing.services import recalc_saldo_tarjeta
+from decimal import Decimal, ROUND_HALF_UP
+from django.utils.dateparse import parse_date
+
+
+def _q2(v) -> Decimal:
+    return Decimal(v).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 class PrestamoListCreateAPIView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -378,9 +384,62 @@ class ComprasTarjetaCreditoUpdateDeleteAPIView(APIView):
             # Si ya estaba inactiva, informamos que ya se eliminó previamente
             return Response({"message": "La compra ya había sido eliminada anteriormente."}, status=status.HTTP_200_OK)
 
+        if compra.pago_liquidacion_id and compra.pago_liquidacion and compra.pago_liquidacion.activo:
+            compra.pago_liquidacion.eliminar_logicamente()
+
         compra.eliminar_logicamente()
         recalc_saldo_tarjeta(compra.tarjeta_credito_id)
         return Response({"message": "Compra eliminada correctamente."}, status=status.HTTP_200_OK)
+
+
+class LiquidarCompraTarjetaAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    @transaction.atomic
+    def post(self, request, pk):
+        compra = get_object_or_404(
+            ComprasTarjetaCredito,
+            pk=pk,
+            tarjeta_credito__usuario=request.user,
+            activo=True
+        )
+
+        serializer = ComprasTarjetaCreditoSerializer()
+        if serializer.get_liquidada(compra):
+            return Response(
+                {"error": "La compra ya se encuentra liquidada."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        monto_restante = _q2(Decimal(str(serializer.get_monto_restante(compra))))
+        if monto_restante <= 0:
+            return Response(
+                {"error": "La compra ya no tiene monto restante por liquidar."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        fecha_pago_raw = request.data.get('fecha_pago') or date.today().isoformat()
+        fecha_pago = parse_date(fecha_pago_raw)
+        if not fecha_pago:
+            return Response(
+                {"error": "La fecha de pago no es válida."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        pago = PagoTarjetaCredito.objects.create(
+            usuario=request.user,
+            tarjeta_credito=compra.tarjeta_credito,
+            monto=monto_restante,
+            fecha_pago=fecha_pago,
+        )
+        pago.pago_compras.set([compra])
+
+        compra.liquidada_manualmente = True
+        compra.pago_liquidacion = pago
+        compra.save(update_fields=['liquidada_manualmente', 'pago_liquidacion'])
+
+        recalc_saldo_tarjeta(compra.tarjeta_credito_id)
+        return Response(ComprasTarjetaCreditoSerializer(compra).data, status=status.HTTP_200_OK)
 
 
 class PagoTarjetaCreditoListCreateAPIView(APIView):
@@ -409,6 +468,11 @@ class PagoTarjetaCreditoUpdateDeleteAPIView(APIView):
 
     def put(self, request, pk):
         pago = get_object_or_404(PagoTarjetaCredito, pk=pk, usuario=request.user, activo=True)
+        if pago.compras_liquidadas.filter(activo=True).exists():
+            return Response(
+                {"error": "Los pagos de liquidación no se pueden editar. Elimine la liquidación y vuelva a registrarla si necesita cambiarla."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         serializer = PagoTarjetaCreditoSerializer(pago, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()  # <- el serializer ya recalcula saldo en su update()
@@ -424,6 +488,10 @@ class PagoTarjetaCreditoUpdateDeleteAPIView(APIView):
         if not pago.activo:
             return Response({"message": "El pago ya había sido eliminado anteriormente."}, status=status.HTTP_200_OK)
 
+        pago.compras_liquidadas.filter(activo=True).update(
+            liquidada_manualmente=False,
+            pago_liquidacion=None
+        )
         pago.eliminar_logicamente()
         recalc_saldo_tarjeta(pago.tarjeta_credito_id)
         return Response({"message": "Pago eliminado correctamente."}, status=status.HTTP_200_OK)
