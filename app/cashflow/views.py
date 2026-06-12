@@ -5,14 +5,142 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from app.catalogos.models import AnioUsuario, Mes, Categoria, Subcategoria, Tipo
 from django.contrib.auth.models import User
-from app.cashflow.models import Ingresos, Egresos
-from app.cashflow.serializers import IngresosSerializer, EgresosSerializer, FinanzasSummarySerializer
+from app.cashflow.models import Ingresos, Egresos, BaulDisponible
+from app.cashflow.serializers import IngresosSerializer, EgresosSerializer, FinanzasSummarySerializer, BaulDisponibleSerializer
 from django.shortcuts import get_object_or_404
 from django.db.models import Sum
 from app.utils.paginator import CustomPagination
 from datetime import date
 
 
+
+
+class BaulListCreateAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        baules = BaulDisponible.objects.filter(usuario=request.user, activo=True).order_by('nombre')
+        serializer = BaulDisponibleSerializer(baules, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = BaulDisponibleSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(usuario=request.user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class BaulDetailAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get_object(self, request, baul_id):
+        return get_object_or_404(BaulDisponible, id=baul_id, usuario=request.user, activo=True)
+
+    def put(self, request, baul_id):
+        baul = self.get_object(request, baul_id)
+        serializer = BaulDisponibleSerializer(baul, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, baul_id):
+        baul = self.get_object(request, baul_id)
+        baul.activo = False
+        baul.save()
+        return Response({"message": "Baúl eliminado correctamente."}, status=status.HTTP_204_NO_CONTENT)
+
+
+class BaulResumenAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        baules = BaulDisponible.objects.filter(usuario=request.user, activo=True).order_by('nombre')
+        serializer = BaulDisponibleSerializer(baules, many=True)
+
+        total_ingresos = Ingresos.objects.filter(
+            usuario=request.user,
+            activo=True
+        ).aggregate(total=Sum('monto'))['total'] or 0
+
+        total_egresos = Egresos.objects.filter(
+            usuario=request.user,
+            activo=True
+        ).aggregate(total=Sum('monto'))['total'] or 0
+
+        disponible_general = total_ingresos - total_egresos
+        total_inicial = sum((baul.saldo_inicial or 0) for baul in baules)
+        total_actual = 0
+        for item in serializer.data:
+            total_actual += item.get('saldo_actual', 0)
+
+        ingresos_sin_asignar = Ingresos.objects.filter(
+            usuario=request.user,
+            activo=True,
+            baul__isnull=True
+        ).aggregate(total=Sum('monto'))['total'] or 0
+
+        egresos_sin_asignar = Egresos.objects.filter(
+            usuario=request.user,
+            activo=True,
+            baul__isnull=True
+        ).aggregate(total=Sum('monto'))['total'] or 0
+
+        diferencia_conciliar = disponible_general - total_actual
+
+        return Response({
+            'status': 'success',
+            'message': 'Resumen global del baúl',
+            'total_inicial': total_inicial,
+            'total_actual': total_actual,
+            'total_disponible_general': disponible_general,
+            'diferencia_conciliar': diferencia_conciliar,
+            'ingresos_sin_asignar': ingresos_sin_asignar,
+            'egresos_sin_asignar': egresos_sin_asignar,
+            'baules': serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+class BaulResumenMensualAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request, anio_id, mes_id):
+        baules = BaulDisponible.objects.filter(usuario=request.user, activo=True).order_by('nombre')
+        serializer = BaulDisponibleSerializer(baules, many=True)
+        serialized = serializer.data
+
+        monthly_rows = []
+        for item in serialized:
+            baul_id = item['id']
+            ingresos_mes = Ingresos.objects.filter(
+                usuario=request.user,
+                anio_id=anio_id,
+                mes_id=mes_id,
+                baul_id=baul_id,
+                activo=True
+            ).aggregate(total=Sum('monto'))['total'] or 0
+
+            egresos_mes = Egresos.objects.filter(
+                usuario=request.user,
+                anio_id=anio_id,
+                mes_id=mes_id,
+                baul_id=baul_id,
+                activo=True
+            ).aggregate(total=Sum('monto'))['total'] or 0
+
+            monthly_rows.append({
+                **item,
+                'ingresos_mes': ingresos_mes,
+                'egresos_mes': egresos_mes,
+                'neto_mes': ingresos_mes - egresos_mes
+            })
+
+        return Response({
+            'status': 'success',
+            'message': 'Resumen mensual del baúl',
+            'baules': monthly_rows
+        }, status=status.HTTP_200_OK)
 
 
 class IngresosListAPIView(APIView):
@@ -38,13 +166,12 @@ class IngresosCreateAPIView(APIView):
         """
         Crea un nuevo ingreso.
         """
-        data = request.data  # Datos enviados desde el frontend
+        data = request.data.copy()  # Datos enviados desde el frontend
         data['tipo'] = 1  # Asignar automáticamente el tipo como 'ingreso' (id=1)
 
-        serializer = IngresosSerializer(data=data)
+        serializer = IngresosSerializer(data=data, context={'request': request})
         if serializer.is_valid():
-            # Guardar el objeto y asignar automáticamente el usuario autenticado
-            serializer.save(usuario=request.user)
+            serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -74,11 +201,11 @@ class IngresosUpdateAPIView(APIView):
         Actualiza un ingreso existente.
         """
         try:
-            ingreso = Ingresos.objects.get(id=ingreso_id, activo=True)
+            ingreso = Ingresos.objects.get(id=ingreso_id, activo=True, usuario=request.user)
         except Ingresos.DoesNotExist:
             return Response({"error": "Ingreso no encontrado."}, status=status.HTTP_404_NOT_FOUND)
 
-        serializer = IngresosSerializer(ingreso, data=request.data, partial=True)
+        serializer = IngresosSerializer(ingreso, data=request.data, partial=True, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
