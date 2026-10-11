@@ -2,8 +2,8 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from app.financing.models import Prestamo, PagosPrestamo, ConceptoPrestamo, CardCredito, ComprasTarjetaCredito, PagoTarjetaCredito
-from app.financing.serializers import PrestamoSerializer, PagosPrestamoSerializer, ConceptoPrestamoSerializer, CardCreditoSerializer, ComprasTarjetaCreditoSerializer, PagoTarjetaCreditoSerializer
+from app.financing.models import Prestamo, PagosPrestamo, ConceptoPrestamo, CardCredito, ComprasTarjetaCredito, PagoTarjetaCredito, PrestamoOtorgado, AbonoPrestamoOtorgado
+from app.financing.serializers import PrestamoSerializer, PagosPrestamoSerializer, ConceptoPrestamoSerializer, CardCreditoSerializer, ComprasTarjetaCreditoSerializer, PagoTarjetaCreditoSerializer, PrestamoOtorgadoSerializer, AbonoPrestamoOtorgadoSerializer
 from django.db import transaction
 from django.db.models import Sum, Q, Count
 from django.shortcuts import get_object_or_404
@@ -198,6 +198,101 @@ class ResumenGeneralPrestamosAPIView(APIView):
             'total_prestamos': round(total_prestamos, 2),
             'total_pagado': round(total_pagado, 2),
             'total_restante': round(total_restante, 2)
+        })
+
+
+class PrestamosOtorgadosListCreateAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        prestamos = PrestamoOtorgado.objects.filter(usuario=request.user, activo=True).order_by('-fecha_prestamo', '-id')
+        return Response(PrestamoOtorgadoSerializer(prestamos, many=True).data)
+
+    def post(self, request):
+        serializer = PrestamoOtorgadoSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(usuario=request.user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PrestamoOtorgadoDetailAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get_object(self, request, pk):
+        return get_object_or_404(PrestamoOtorgado, pk=pk, usuario=request.user, activo=True)
+
+    def put(self, request, pk):
+        prestamo = self.get_object(request, pk)
+        serializer = PrestamoOtorgadoSerializer(prestamo, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def delete(self, request, pk):
+        prestamo = self.get_object(request, pk)
+        prestamo.abonos.filter(activo=True).update(activo=False)
+        prestamo.eliminar_logicamente()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AbonosPrestamoOtorgadoListCreateAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get_prestamo(self, request, prestamo_id):
+        return get_object_or_404(PrestamoOtorgado, pk=prestamo_id, usuario=request.user, activo=True)
+
+    def get(self, request, prestamo_id):
+        prestamo = self.get_prestamo(request, prestamo_id)
+        abonos = AbonoPrestamoOtorgado.objects.filter(prestamo=prestamo, usuario=request.user, activo=True).order_by('-fecha_pago', '-id')
+        return Response(AbonoPrestamoOtorgadoSerializer(abonos, many=True).data)
+
+    def post(self, request, prestamo_id):
+        prestamo = self.get_prestamo(request, prestamo_id)
+        serializer = AbonoPrestamoOtorgadoSerializer(data=request.data, context={'prestamo': prestamo})
+        if serializer.is_valid():
+            serializer.save(usuario=request.user, prestamo=prestamo)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AbonoPrestamoOtorgadoDetailAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get_abono(self, request, pk):
+        return get_object_or_404(AbonoPrestamoOtorgado, pk=pk, usuario=request.user, activo=True)
+
+    def put(self, request, pk):
+        abono = self.get_abono(request, pk)
+        serializer = AbonoPrestamoOtorgadoSerializer(
+            abono, data=request.data, partial=True, context={'prestamo': abono.prestamo}
+        )
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk):
+        self.get_abono(request, pk).eliminar_logicamente()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ResumenPrestamosOtorgadosAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        prestamos = PrestamoOtorgado.objects.filter(usuario=request.user, activo=True)
+        capital = prestamos.aggregate(total=Sum('monto'))['total'] or Decimal('0')
+        recuperado = AbonoPrestamoOtorgado.objects.filter(
+            usuario=request.user, activo=True, prestamo__activo=True
+        ).aggregate(total=Sum('monto'))['total'] or Decimal('0')
+        return Response({
+            'capital_prestado': _money(capital),
+            'total_recuperado': _money(recuperado),
+            'saldo_pendiente': _money(capital - recuperado),
+            'prestamos_activos': prestamos.count(),
         })
 
 

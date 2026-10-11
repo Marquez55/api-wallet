@@ -32,6 +32,40 @@ class PagosPrestamo(models.Model):
         self.save()
 
 
+class PrestamoOtorgado(models.Model):
+    """Dinero prestado por el usuario a otra persona (cuenta por cobrar)."""
+    usuario = models.ForeignKey(User, on_delete=models.CASCADE)
+    prestatario = models.CharField(max_length=300)
+    concepto = models.CharField(max_length=300, blank=True, default='')
+    monto = models.DecimalField(max_digits=12, decimal_places=2)
+    fecha_prestamo = models.DateField()
+    notas = models.TextField(blank=True, default='')
+    activo = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.prestatario} — ${self.monto:,.2f}"
+
+    def eliminar_logicamente(self):
+        self.activo = False
+        self.save(update_fields=['activo'])
+
+
+class AbonoPrestamoOtorgado(models.Model):
+    usuario = models.ForeignKey(User, on_delete=models.CASCADE)
+    prestamo = models.ForeignKey(PrestamoOtorgado, on_delete=models.CASCADE, related_name='abonos')
+    monto = models.DecimalField(max_digits=12, decimal_places=2)
+    fecha_pago = models.DateField()
+    nota = models.CharField(max_length=300, blank=True, default='')
+    activo = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"Abono de {self.prestamo.prestatario} — ${self.monto:,.2f}"
+
+    def eliminar_logicamente(self):
+        self.activo = False
+        self.save(update_fields=['activo'])
+
+
 class ConceptoPrestamo(models.Model):
     prestamo = models.ForeignKey(Prestamo, on_delete=models.CASCADE, related_name='conceptos')
     descripcion = models.CharField(max_length=300)

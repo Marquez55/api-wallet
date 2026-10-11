@@ -15,6 +15,12 @@ urlpatterns = [
 
     # Resumen prestamos
     path('prestamos/total/', views.ResumenGeneralPrestamosAPIView.as_view(), name='total-prestamos'),
+    # Préstamos otorgados (cuentas por cobrar, independientes del préstamo personal)
+    path('prestamos-otorgados/resumen/', views.ResumenPrestamosOtorgadosAPIView.as_view(), name='prestamos-otorgados-resumen'),
+    path('prestamos-otorgados/', views.PrestamosOtorgadosListCreateAPIView.as_view(), name='prestamos-otorgados-list-create'),
+    path('prestamos-otorgados/<int:prestamo_id>/abonos/', views.AbonosPrestamoOtorgadoListCreateAPIView.as_view(), name='abonos-prestamo-otorgado-list-create'),
+    path('prestamos-otorgados/<int:pk>/', views.PrestamoOtorgadoDetailAPIView.as_view(), name='prestamo-otorgado-detail'),
+    path('abonos-otorgados/<int:pk>/', views.AbonoPrestamoOtorgadoDetailAPIView.as_view(), name='abono-prestamo-otorgado-detail'),
     path('dashboard/resumen/', views.DashboardFinancingSummaryAPIView.as_view(), name='dashboard-financing-summary'),
 
     # Conceptos prestamo

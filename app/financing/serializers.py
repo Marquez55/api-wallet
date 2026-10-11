@@ -13,6 +13,8 @@ from app.financing.models import (
     CardCredito,
     ComprasTarjetaCredito,
     PagoTarjetaCredito,
+    PrestamoOtorgado,
+    AbonoPrestamoOtorgado,
 )
 from app.financing.services import recalc_saldo_tarjeta
 
@@ -39,6 +41,58 @@ class PagosPrestamoSerializer(serializers.ModelSerializer):
     class Meta:
         model = PagosPrestamo
         fields = ['id', 'prestamo', 'monto', 'fecha_pago']
+
+
+class AbonoPrestamoOtorgadoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AbonoPrestamoOtorgado
+        fields = ['id', 'prestamo', 'monto', 'fecha_pago', 'nota']
+        read_only_fields = ['prestamo']
+
+    def validate_monto(self, monto):
+        if monto <= 0:
+            raise serializers.ValidationError('El abono debe ser mayor a cero.')
+
+        prestamo = self.context.get('prestamo') or getattr(self.instance, 'prestamo', None)
+        if prestamo:
+            abonos = prestamo.abonos.filter(activo=True)
+            if self.instance:
+                abonos = abonos.exclude(pk=self.instance.pk)
+            pagado = abonos.aggregate(total=Sum('monto'))['total'] or Decimal('0')
+            restante = Decimal(prestamo.monto) - pagado
+            if Decimal(monto) > restante:
+                raise serializers.ValidationError('El abono no puede superar el saldo pendiente.')
+        return monto
+
+
+class PrestamoOtorgadoSerializer(serializers.ModelSerializer):
+    total_recuperado = serializers.SerializerMethodField()
+    saldo_pendiente = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PrestamoOtorgado
+        fields = ['id', 'prestatario', 'concepto', 'monto', 'fecha_prestamo', 'notas',
+                  'total_recuperado', 'saldo_pendiente']
+
+    def validate_monto(self, monto):
+        if monto <= 0:
+            raise serializers.ValidationError('El monto debe ser mayor a cero.')
+        if self.instance:
+            recuperado = self.instance.abonos.filter(activo=True).aggregate(total=Sum('monto'))['total'] or Decimal('0')
+            if Decimal(monto) < recuperado:
+                raise serializers.ValidationError('El monto no puede ser menor a los abonos registrados.')
+        return monto
+
+    def validate_prestatario(self, value):
+        if not value.strip():
+            raise serializers.ValidationError('Indica quién recibió el préstamo.')
+        return value.strip()
+
+    def get_total_recuperado(self, obj):
+        return float(obj.abonos.filter(activo=True).aggregate(total=Sum('monto'))['total'] or Decimal('0'))
+
+    def get_saldo_pendiente(self, obj):
+        return float(Decimal(obj.monto) - Decimal(str(self.get_total_recuperado(obj))))
 
 
 class ConceptoPrestamoSerializer(serializers.ModelSerializer):
