@@ -46,5 +46,7 @@ urlpatterns = [
 
     path('proyect/', include('app.proyect.urls')),
 
+    path('agenda/', include('app.agenda.urls')),
+
 
 ]

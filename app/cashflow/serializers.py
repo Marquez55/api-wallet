@@ -1,12 +1,14 @@
 from rest_framework import serializers
 from django.db.models import Sum
-from app.cashflow.models import Ingresos, Tipo, Egresos, Subcategoria, BaulDisponible
+from app.cashflow.models import Ingresos, Tipo, Egresos, Subcategoria, BaulDisponible, TransferenciaBaul
 
 
 class BaulDisponibleSerializer(serializers.ModelSerializer):
     saldo_actual = serializers.SerializerMethodField()
     ingresos_asignados = serializers.SerializerMethodField()
     egresos_asignados = serializers.SerializerMethodField()
+    transferencias_recibidas = serializers.SerializerMethodField()
+    transferencias_enviadas = serializers.SerializerMethodField()
 
     class Meta:
         model = BaulDisponible
@@ -19,6 +21,8 @@ class BaulDisponibleSerializer(serializers.ModelSerializer):
             'saldo_actual',
             'ingresos_asignados',
             'egresos_asignados',
+            'transferencias_recibidas',
+            'transferencias_enviadas',
             'activo'
         ]
         read_only_fields = ['activo', 'usuario']
@@ -32,7 +36,23 @@ class BaulDisponibleSerializer(serializers.ModelSerializer):
         return total
 
     def get_saldo_actual(self, obj):
-        return (obj.saldo_inicial or 0) + self.get_ingresos_asignados(obj) - self.get_egresos_asignados(obj)
+        return (
+            (obj.saldo_inicial or 0)
+            + self.get_ingresos_asignados(obj)
+            - self.get_egresos_asignados(obj)
+            + self.get_transferencias_recibidas(obj)
+            - self.get_transferencias_enviadas(obj)
+        )
+
+    def get_transferencias_recibidas(self, obj):
+        return TransferenciaBaul.objects.filter(
+            usuario=obj.usuario, destino=obj, activo=True
+        ).aggregate(total=Sum('monto'))['total'] or 0
+
+    def get_transferencias_enviadas(self, obj):
+        return TransferenciaBaul.objects.filter(
+            usuario=obj.usuario, origen=obj, activo=True
+        ).aggregate(total=Sum('monto'))['total'] or 0
 
 
 class IngresosSerializer(serializers.ModelSerializer):
@@ -149,3 +169,26 @@ class FinanzasSummarySerializer(serializers.Serializer):
     disponible = serializers.DecimalField(max_digits=15, decimal_places=2)
     transaccion = serializers.IntegerField()
     mes_actual = serializers.CharField(max_length=20)
+
+
+class TransferenciaBaulSerializer(serializers.ModelSerializer):
+    origen_nombre = serializers.CharField(source='origen.nombre', read_only=True)
+    destino_nombre = serializers.CharField(source='destino.nombre', read_only=True)
+
+    class Meta:
+        model = TransferenciaBaul
+        fields = [
+            'id', 'origen', 'origen_nombre', 'destino', 'destino_nombre',
+            'monto', 'fecha', 'notas', 'activo', 'creado'
+        ]
+        read_only_fields = ['id', 'activo', 'creado', 'origen_nombre', 'destino_nombre']
+
+    def validate_monto(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('El monto debe ser mayor a cero.')
+        return value
+
+    def validate(self, attrs):
+        if attrs.get('origen') and attrs.get('destino') and attrs['origen'].id == attrs['destino'].id:
+            raise serializers.ValidationError({'destino': 'Selecciona un baúl diferente al origen.'})
+        return attrs

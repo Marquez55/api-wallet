@@ -5,12 +5,32 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from app.catalogos.models import AnioUsuario, Mes, Categoria, Subcategoria, Tipo
 from django.contrib.auth.models import User
-from app.cashflow.models import Ingresos, Egresos, BaulDisponible
-from app.cashflow.serializers import IngresosSerializer, EgresosSerializer, FinanzasSummarySerializer, BaulDisponibleSerializer
+from app.cashflow.models import Ingresos, Egresos, BaulDisponible, TransferenciaBaul
+from app.cashflow.serializers import (
+    IngresosSerializer, EgresosSerializer, FinanzasSummarySerializer,
+    BaulDisponibleSerializer, TransferenciaBaulSerializer,
+)
 from django.shortcuts import get_object_or_404
 from django.db.models import Sum
+from django.db import transaction
+from decimal import Decimal
 from app.utils.paginator import CustomPagination
 from datetime import date
+
+
+MESES_NUMERO = {
+    'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4, 'mayo': 5, 'junio': 6,
+    'julio': 7, 'agosto': 8, 'septiembre': 9, 'setiembre': 9,
+    'octubre': 10, 'noviembre': 11, 'diciembre': 12,
+}
+
+
+def saldo_actual_baul(baul):
+    ingresos = Ingresos.objects.filter(usuario=baul.usuario, baul=baul, activo=True).aggregate(total=Sum('monto'))['total'] or Decimal('0')
+    egresos = Egresos.objects.filter(usuario=baul.usuario, baul=baul, activo=True).aggregate(total=Sum('monto'))['total'] or Decimal('0')
+    recibidas = TransferenciaBaul.objects.filter(usuario=baul.usuario, destino=baul, activo=True).aggregate(total=Sum('monto'))['total'] or Decimal('0')
+    enviadas = TransferenciaBaul.objects.filter(usuario=baul.usuario, origen=baul, activo=True).aggregate(total=Sum('monto'))['total'] or Decimal('0')
+    return (baul.saldo_inicial or Decimal('0')) + ingresos - egresos + recibidas - enviadas
 
 
 
@@ -102,13 +122,79 @@ class BaulResumenAPIView(APIView):
         }, status=status.HTTP_200_OK)
 
 
+class TransferenciaBaulListCreateAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        transferencias = TransferenciaBaul.objects.filter(
+            usuario=request.user, activo=True
+        ).select_related('origen', 'destino')
+
+        anio = request.query_params.get('anio')
+        mes = request.query_params.get('mes')
+        limite = request.query_params.get('limite', '12')
+        try:
+            if anio:
+                transferencias = transferencias.filter(fecha__year=int(anio))
+            if mes:
+                mes_numero = int(mes)
+                if mes_numero < 1 or mes_numero > 12:
+                    raise ValueError
+                transferencias = transferencias.filter(fecha__month=mes_numero)
+            limite = min(max(int(limite), 1), 100)
+        except (TypeError, ValueError):
+            return Response({'detail': 'Los filtros de año, mes o límite no son válidos.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = TransferenciaBaulSerializer(transferencias[:limite], many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = TransferenciaBaulSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        origen_id = serializer.validated_data['origen'].id
+        destino_id = serializer.validated_data['destino'].id
+        locked_baules = {
+            baul.id: baul
+            for baul in BaulDisponible.objects.select_for_update()
+            .filter(id__in=[origen_id, destino_id], usuario=request.user, activo=True)
+            .order_by('id')
+        }
+        origen = locked_baules.get(origen_id)
+        destino = locked_baules.get(destino_id)
+        if origen is None or destino is None:
+            return Response({'detail': 'Uno de los baúles no existe o no está disponible.'}, status=status.HTTP_404_NOT_FOUND)
+        monto = serializer.validated_data['monto']
+        disponible = saldo_actual_baul(origen)
+        if monto > disponible:
+            return Response(
+                {'monto': [f'El monto supera el saldo disponible de {origen.nombre} ({disponible:,.2f}).']},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        transferencia = serializer.save(usuario=request.user, origen=origen, destino=destino)
+        return Response(TransferenciaBaulSerializer(transferencia).data, status=status.HTTP_201_CREATED)
+
+
 class BaulResumenMensualAPIView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request, anio_id, mes_id):
+        anio = get_object_or_404(AnioUsuario, id=anio_id, usuario=request.user)
+        mes = get_object_or_404(Mes, id=mes_id)
+        mes_numero = MESES_NUMERO.get((mes.mes or '').strip().lower())
         baules = BaulDisponible.objects.filter(usuario=request.user, activo=True).order_by('nombre')
         serializer = BaulDisponibleSerializer(baules, many=True)
         serialized = serializer.data
+        transferencias_qs = TransferenciaBaul.objects.filter(
+            usuario=request.user,
+            activo=True,
+            fecha__year=anio.anio,
+            fecha__month=mes_numero
+        ).select_related('origen', 'destino') if mes_numero else TransferenciaBaul.objects.none()
+        transferencias_data = TransferenciaBaulSerializer(transferencias_qs, many=True).data
 
         monthly_rows = []
         for item in serialized:
@@ -128,18 +214,23 @@ class BaulResumenMensualAPIView(APIView):
                 baul_id=baul_id,
                 activo=True
             ).aggregate(total=Sum('monto'))['total'] or 0
+            transferencias_recibidas_mes = transferencias_qs.filter(destino_id=baul_id).aggregate(total=Sum('monto'))['total'] or 0
+            transferencias_enviadas_mes = transferencias_qs.filter(origen_id=baul_id).aggregate(total=Sum('monto'))['total'] or 0
 
             monthly_rows.append({
                 **item,
                 'ingresos_mes': ingresos_mes,
                 'egresos_mes': egresos_mes,
-                'neto_mes': ingresos_mes - egresos_mes
+                'transferencias_recibidas_mes': transferencias_recibidas_mes,
+                'transferencias_enviadas_mes': transferencias_enviadas_mes,
+                'neto_mes': ingresos_mes - egresos_mes + transferencias_recibidas_mes - transferencias_enviadas_mes
             })
 
         return Response({
             'status': 'success',
             'message': 'Resumen mensual del baúl',
-            'baules': monthly_rows
+            'baules': monthly_rows,
+            'transferencias': transferencias_data
         }, status=status.HTTP_200_OK)
 
 

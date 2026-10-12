@@ -6,6 +6,7 @@ urlpatterns = [
     path('baul/', views.BaulListCreateAPIView.as_view(), name='baul-list-create'),
     path('baul/resumen/', views.BaulResumenAPIView.as_view(), name='baul-resumen'),
     path('baul/resumen/<int:anio_id>/<int:mes_id>/', views.BaulResumenMensualAPIView.as_view(), name='baul-resumen-mensual'),
+    path('baul/transferencias/', views.TransferenciaBaulListCreateAPIView.as_view(), name='baul-transferencias'),
     path('baul/<int:baul_id>/', views.BaulDetailAPIView.as_view(), name='baul-detail'),
 
     path('ingresos/<int:anio_id>/<int:mes_id>/', views.IngresosListAPIView.as_view(), name='ingresos-list'),

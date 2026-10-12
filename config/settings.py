@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     'app.utils',
     'app.financing',
     'app.proyect',
+    'app.agenda',
 ]
 
 # Middleware

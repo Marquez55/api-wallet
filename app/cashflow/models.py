@@ -46,3 +46,22 @@ class Egresos(models.Model):
 
     def __str__(self):
         return f"{self.usuario.username} - {self.fecha} - {self.categoria} - {self.subcategoria} - {self.monto}"
+
+
+class TransferenciaBaul(models.Model):
+    """Traspaso interno entre baúles; no cuenta como ingreso ni egreso global."""
+    usuario = models.ForeignKey(User, on_delete=models.CASCADE)
+    origen = models.ForeignKey(BaulDisponible, on_delete=models.PROTECT, related_name='transferencias_enviadas')
+    destino = models.ForeignKey(BaulDisponible, on_delete=models.PROTECT, related_name='transferencias_recibidas')
+    fecha = models.DateField()
+    monto = models.DecimalField(max_digits=12, decimal_places=2)
+    notas = models.TextField(blank=True, default='')
+    activo = models.BooleanField(default=True)
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-fecha', '-id']
+        indexes = [models.Index(fields=['usuario', 'fecha', 'activo'])]
+
+    def __str__(self):
+        return f"{self.origen.nombre} → {self.destino.nombre}: {self.monto}"
